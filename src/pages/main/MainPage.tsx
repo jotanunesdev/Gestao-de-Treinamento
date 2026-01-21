@@ -1,7 +1,11 @@
+import { useReadViewContext } from '../../app/readViewContext'
+
 function MainPage() {
+  const { data } = useReadViewContext()
+
   return (
     <section>
-      <h1>Main</h1>
+      <pre>{data ? JSON.stringify(data, null, 2) : 'Sem dados'}</pre>
     </section>
   )
 }

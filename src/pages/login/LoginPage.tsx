@@ -1,7 +1,9 @@
 import styles from "./login.module.css"
-// import { useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { useState } from "react"
 import { useReadView } from "../../shared/hooks/useReadView"
+import { useReadViewContext } from "../../app/readViewContext"
+import { ROUTES } from "../../app/routes"
 import Button from "../../shared/ui/button/Button"
 import Input from "../../shared/ui/input/Input"
 
@@ -11,8 +13,9 @@ interface User {
 }
 
 const LoginPage = () => {
-  const {data, loading, error, readView} = useReadView()
-  // const navigate = useNavigate()
+  const {loading, error, readView} = useReadView()
+  const { setData } = useReadViewContext()
+  const navigate = useNavigate()
   const [user, setUser] = useState<User>({
     cpf: "",
     dtNascimento: ""
@@ -35,12 +38,13 @@ const LoginPage = () => {
         : ""
       const filter = `PPESSOA.DTNASCIMENTO='${nascimento}' AND PPESSOA.CPF='${cpf}'`
 
-      await readView({
+      const result = await readView({
         dataServerName: "FopFuncData",
         filter,
         context: "CODCOLIGADA=1"
       })
-      // navigate("/main")
+      setData(result)
+      navigate(ROUTES.main)
     } catch(e) {
       console.error(e)
     }
@@ -104,7 +108,6 @@ const LoginPage = () => {
           </div>
         </div>
         {error ? <p>{error}</p> : null}
-        {data ? <pre>{JSON.stringify(data, null, 2)}</pre> : null}
       </div>
     </div>
   )
