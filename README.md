@@ -1,73 +1,40 @@
-# React + TypeScript + Vite
+# Gestao Treinamento
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Este projeto usa uma estrutura de pastas focada em arquitetura e separacao de responsabilidades.
 
-Currently, two official plugins are available:
+## Estrutura base
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+  app/
+  pages/
+  features/
+  entities/
+  widgets/
+  shared/
+    assets/
+    styles/
+    ui/
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## O que vai em cada pasta e porque
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `src/app`: composicao da aplicacao (providers, roteamento, layout raiz, inicializacao). Porque centraliza a orquestracao e evita acoplamento entre camadas.
+- `src/pages`: telas ligadas a rotas, compostas por widgets e features. Porque separa navegacao da logica de negocio.
+- `src/features`: funcionalidades focadas em casos de uso (ex: criar treinamento, listar turmas). Pode ter componentes, hooks, servicos e testes da feature. Porque facilita evolucao por fluxo.
+- `src/entities`: modelos de dominio e regras centrais (tipos, validacoes, mappers, acesso a dados). Porque garante consistencia e reutilizacao.
+- `src/widgets`: blocos de UI maiores que combinam features e entities (ex: dashboard, tabelas completas). Porque promove reuso de composicoes complexas.
+- `src/shared`: itens reutilizaveis e agnosticos (UI generica, utils, hooks basicos, estilos globais, assets). Porque reduz duplicacao.
+- `src/shared/styles`: estilos globais, tokens e resets. Porque centraliza identidade visual.
+- `src/shared/ui`: componentes "dumb" e reusaveis (Button, Input). Porque mantem consistencia.
+- `src/shared/assets`: imagens, icons e fontes comuns. Porque evita espalhar arquivos estaticos.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Regras simples de dependencia
+
+- Camadas inferiores nao importam de camadas superiores.
+- `shared` pode ser usado por todas as camadas; `entities` por `features/widgets/pages/app`; e assim por diante.
+
+## Outros diretorios
+
+- `public/`: arquivos estaticos servidos diretamente pelo Vite (favicons, manifest).
+- `src/main.tsx`: ponto de entrada da aplicacao.
