@@ -6,11 +6,7 @@ import { useReadViewContext } from "../../app/readViewContext"
 import { ROUTES } from "../../app/routes"
 import Button from "../../shared/ui/button/Button"
 import Input from "../../shared/ui/input/Input"
-
-interface User {
-  cpf: string,
-  dtNascimento: string
-}
+import type { User } from "../../entities/types"
 
 const LoginPage = () => {
   const {loading, error, readView} = useReadView()
@@ -36,7 +32,7 @@ const LoginPage = () => {
       const nascimento = user.dtNascimento
         ? `${user.dtNascimento} 00:00:00.000`
         : ""
-      const filter = `PPESSOA.DTNASCIMENTO='${nascimento}' AND PPESSOA.CPF='${cpf}'`
+      const filter = `PPESSOA.DTNASCIMENTO='${nascimento}' AND PPESSOA.CPF='${cpf}' AND PFUNC.CODSITUACAO='A'`
 
       const result = await readView({
         dataServerName: "FopFuncData",

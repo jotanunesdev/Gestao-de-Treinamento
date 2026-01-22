@@ -1,0 +1,131 @@
+.main {
+    --aside-width: min(320px, 90vw);
+    --surface-gap: 1.5rem;
+    --surface-side: 1.25rem;
+    --surface-radius: 16px;
+    --surface-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    --surface-padding: 2rem 1.75rem;
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: var(--aside-width) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.asideSlot {
+    grid-column: 1;
+    grid-row: 1 / -1;
+}
+
+.nav {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--surface-padding);
+    background-color: #fff;
+    border-radius: var(--surface-radius);
+    box-shadow: var(--surface-shadow);
+    margin: var(--surface-gap) var(--surface-side) 0;
+}
+
+.navTitle {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0 0 0.25rem;
+}
+
+.navSubtitle {
+    font-size: 0.9rem;
+    color: #666;
+    margin: 0;
+}
+
+.navActions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.actionButton {
+    border: none;
+    background: #1e40af;
+    color: #fff;
+    padding: 0.75rem 1.25rem;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.actionButton:hover {
+    transform: translateY(-1px);
+    opacity: 0.92;
+}
+
+.content {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 0;
+}
+
+.contentCard {
+    background-color: #fff;
+    border-radius: var(--surface-radius);
+    padding: var(--surface-padding);
+    box-shadow: var(--surface-shadow);
+    margin: var(--surface-gap) var(--surface-side) var(--surface-gap);
+}
+
+.contentCard h2 {
+    font-size: 1.2rem;
+    margin: 0 0 0.75rem;
+    color: #1a1a1a;
+}
+
+.contentCard p {
+    margin: 0;
+    color: #666;
+}
+
+.asideNav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.asideLink {
+    border: none;
+    background: #f1f5f9;
+    color: var(--black-color);
+    padding: 0.7rem 1rem;
+    border-radius: 10px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+    text-decoration: none;
+}
+
+.asideLink:hover {
+    background: var(--primary-color);
+    color: var(--white-color);
+    transform: translateX(2px);
+}
+
+.asideLinkActive {
+    background: var(--secondary-color);
+    color: var(--white-color);
+}
+
+@media (max-width: 900px) {
+    .main {
+        --aside-width: min(280px, 85vw);
+        --surface-gap: 1.25rem;
+        --surface-side: 1rem;
+        --surface-padding: 1.5rem 1.25rem;
+    }
+}
