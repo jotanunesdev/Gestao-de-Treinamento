@@ -1,0 +1,57 @@
+.root {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #0f1115;
+}
+
+.thumbButton {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.thumbButton:focus-visible {
+  outline: 3px solid #1f6feb;
+  outline-offset: -3px;
+}
+
+.thumbnail {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.play svg {
+  width: 64px;
+  height: 64px;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.4));
+}
+
+.play circle {
+  fill: rgba(0, 0, 0, 0.6);
+}
+
+.play polygon {
+  fill: #ffffff;
+}
+
+.iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}

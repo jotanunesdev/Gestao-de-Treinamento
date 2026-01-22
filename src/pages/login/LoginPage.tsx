@@ -3,14 +3,15 @@ import { useNavigate } from "react-router-dom"
 import { useState } from "react"
 import { useReadView } from "../../shared/hooks/useReadView"
 import { useReadViewContext } from "../../app/readViewContext"
+import type { ReadViewResponse } from "../../shared/types/readView"
 import { ROUTES } from "../../app/routes"
 import Button from "../../shared/ui/button/Button"
 import Input from "../../shared/ui/input/Input"
 import type { User } from "../../entities/types"
 
 const LoginPage = () => {
-  const {loading, error, readView} = useReadView()
-  const { setData } = useReadViewContext()
+  const {loading, error, readView} = useReadView<ReadViewResponse>()
+  const { setData } = useReadViewContext<ReadViewResponse>()
   const navigate = useNavigate()
   const [user, setUser] = useState<User>({
     cpf: "",

@@ -121,6 +121,70 @@
     color: var(--white-color);
 }
 
+.video_section {
+    display: flex;
+    gap: 20px;
+}
+
+.video_content {
+    padding: 0.6rem;
+    border: 1px solid #ccc;
+    border-radius: 15px;
+    background-color: var(--black-color);
+    height: auto;
+    width: 570px;
+    margin: 1rem 0;
+    flex: 1;
+    transition: 0.3s ease;
+}
+
+.material {
+    margin: 1rem 0;
+    border: 1px solid var(--black-color);
+    padding: 1rem;
+    flex: 1;
+    border-radius: 15px;
+}
+
+.apoio {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.apoioItem {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #1a1a1a;
+    padding: 0.65rem 0.85rem;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.apoioItem:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
+.apoioIcon {
+    color: var(--primary-color);
+    font-size: 1rem;
+}
+
+.video_content:hover {
+    background-color: var(--primary-color);
+    box-shadow: var(--box-shadow);
+}
+
+
+
 @media (max-width: 900px) {
     .main {
         --aside-width: min(280px, 85vw);
