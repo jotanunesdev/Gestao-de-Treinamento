@@ -15,8 +15,6 @@ import { NavLink } from "react-router-dom"
 import { useEffect } from "react"
 import type { ReadViewResponse, PFuncItem } from "../../shared/types/readView"
 
-
-
 const MainPage = () => {
   const { data } = useReadViewContext<ReadViewResponse>()
 
