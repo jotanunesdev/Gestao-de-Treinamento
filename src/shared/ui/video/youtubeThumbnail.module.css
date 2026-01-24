@@ -4,7 +4,35 @@
   aspect-ratio: 16 / 9;
   border-radius: 16px;
   overflow: hidden;
-  background: #0f1115;
+  background: var(--media-bg);
+}
+
+.statusBadge {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.statusNotStarted {
+  background: rgba(15, 23, 42, 0.85);
+  color: #f8fafc;
+}
+
+.statusInProgress {
+  background: rgba(30, 64, 175, 0.9);
+  color: #eff6ff;
+}
+
+.statusCompleted {
+  background: rgba(22, 163, 74, 0.9);
+  color: #f0fdf4;
 }
 
 .thumbButton {
@@ -14,6 +42,7 @@
   padding: 0;
   background: transparent;
   cursor: pointer;
+  z-index: 1;
 }
 
 .thumbButton:focus-visible {
@@ -49,9 +78,12 @@
   fill: #ffffff;
 }
 
-.iframe {
+.player {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   border: 0;
   display: block;
+  z-index: 0;
 }

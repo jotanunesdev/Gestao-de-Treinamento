@@ -6,12 +6,13 @@ type InputProps = {
     isLoading?: boolean,
     size?: "sm" | "md" | "lg",
     onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void,
     label: string,
     name: string,
     value: string
 }
 
-const Input = ({type = "text", placeholder, value ,isLoading = false, size = "md", onChange, label, name}: InputProps) => {
+const Input = ({type = "text", placeholder, value ,isLoading = false, size = "md", onChange, label, name, onKeyDown}: InputProps) => {
   return (
     <label htmlFor={name}>
         {label}
@@ -23,6 +24,7 @@ const Input = ({type = "text", placeholder, value ,isLoading = false, size = "md
           value={value}
           disabled={isLoading}
           onChange={onChange}
+          onKeyDown={onKeyDown}
           className={`${styles.input} ${styles[size]}`}
         />
     </label>

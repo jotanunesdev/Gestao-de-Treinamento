@@ -1,0 +1,15 @@
+{
+    "RM": {
+        "modulos": {
+            "rh": [
+                { "id": 1, "titulo": "Visão Geral - TOTVS RM - Módulo RH", "status": "Não Iniciado", "video": "link" },
+                { "id": 2, "titulo": "Cadastro de Colaboradores", "status": "Não Iniciado", "video": "link" },
+                { "id": 3, "titulo": "Folha de Pagamento", "status": "Não Iniciado", "video": "link" },
+                { "id": 4, "titulo": "Vale Alimentação", "status": "Não Iniciado", "video": "link" }
+            ],
+            "financeiro": [
+                { "id": 1, "titulo": "Visão Geral - TOTVS RM - Módulo RH", "status": "Não Iniciado", "video": "link" }
+            ]
+        }
+    }
+}

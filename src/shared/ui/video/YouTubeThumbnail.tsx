@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import styles from "./youtubeThumbnail.module.css"
 
 function getYouTubeId(urlOrId: string) {
@@ -21,11 +21,91 @@ function getYouTubeId(urlOrId: string) {
   }
 }
 
+type VideoStatus = "nao-iniciado" | "em-andamento" | "concluido"
+
 type Props = {
   video: string // URL ou ID
   alt?: string
   className?: string
   title?: string
+  status?: VideoStatus
+}
+
+type YouTubePlayer = {
+  destroy: () => void
+}
+
+type YouTubeApi = {
+  Player: new (
+    element: HTMLElement,
+    options: {
+      videoId: string
+      playerVars?: Record<string, string | number>
+      events?: {
+        onStateChange?: (event: { data: number }) => void
+      }
+    },
+  ) => YouTubePlayer
+  PlayerState: {
+    ENDED: number
+    PLAYING: number
+  }
+}
+
+type YouTubeWindow = Window & {
+  YT?: YouTubeApi
+  onYouTubeIframeAPIReady?: () => void
+}
+
+let youTubeApiPromise: Promise<YouTubeApi> | null = null
+
+function loadYouTubeApi() {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("YouTube API unavailable"))
+  }
+
+  const currentWindow = window as YouTubeWindow
+  if (currentWindow.YT?.Player) {
+    return Promise.resolve(currentWindow.YT)
+  }
+
+  if (!youTubeApiPromise) {
+    youTubeApiPromise = new Promise<YouTubeApi>((resolve, reject) => {
+      const existingScript = document.getElementById("youtube-iframe-api")
+      if (!existingScript) {
+        const script = document.createElement("script")
+        script.id = "youtube-iframe-api"
+        script.src = "https://www.youtube.com/iframe_api"
+        script.async = true
+        script.onerror = () => {
+          youTubeApiPromise = null
+          reject(new Error("YouTube API failed to load"))
+        }
+        document.head.appendChild(script)
+      }
+
+      const previousReady = currentWindow.onYouTubeIframeAPIReady
+      currentWindow.onYouTubeIframeAPIReady = () => {
+        if (typeof previousReady === "function") {
+          previousReady()
+        }
+
+        if (currentWindow.YT?.Player) {
+          resolve(currentWindow.YT)
+        } else {
+          reject(new Error("YouTube API unavailable"))
+        }
+      }
+    })
+  }
+
+  return youTubeApiPromise
+}
+
+const STATUS_LABELS: Record<VideoStatus, string> = {
+  "nao-iniciado": "Não iniciado",
+  "em-andamento": "Em andamento",
+  concluido: "Concluído",
 }
 
 export default function YouTubeThumbnail({
@@ -33,10 +113,16 @@ export default function YouTubeThumbnail({
   alt = "Capa do video",
   className,
   title,
+  status
 }: Props) {
   const id = useMemo(() => getYouTubeId(video), [video])
   const [useFallback, setUseFallback] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [hasStarted, setHasStarted] = useState(false)
+  const [hasCompleted, setHasCompleted] = useState(false)
+  const [useApiFallback, setUseApiFallback] = useState(false)
+  const playerRef = useRef<YouTubePlayer | null>(null)
+  const playerContainerRef = useRef<HTMLDivElement | null>(null)
 
   if (!id) return null
 
@@ -44,21 +130,91 @@ export default function YouTubeThumbnail({
     ? `https://img.youtube.com/vi/${id}/hqdefault.jpg`
     : `https://img.youtube.com/vi/${id}/maxresdefault.jpg`
 
+  useEffect(() => {
+    if (!isPlaying || !id || useApiFallback) {
+      return undefined
+    }
+
+    let cancelled = false
+
+    loadYouTubeApi()
+      .then((YT) => {
+        if (cancelled || !playerContainerRef.current) {
+          return
+        }
+
+        if (playerRef.current) {
+          playerRef.current.destroy()
+        }
+
+        playerRef.current = new YT.Player(playerContainerRef.current, {
+          videoId: id,
+          playerVars: {
+            autoplay: 1,
+            rel: 0,
+          },
+          events: {
+            onStateChange: (event) => {
+              if (event.data === YT.PlayerState.PLAYING) {
+                setHasStarted(true)
+              }
+              if (event.data === YT.PlayerState.ENDED) {
+                setHasCompleted(true)
+              }
+            },
+          },
+        })
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUseApiFallback(true)
+        }
+      })
+
+    return () => {
+      cancelled = true
+      if (playerRef.current) {
+        playerRef.current.destroy()
+        playerRef.current = null
+      }
+    }
+  }, [id, isPlaying, useApiFallback])
+
+  const resolvedStatus: VideoStatus =
+    status ?? (hasCompleted ? "concluido" : hasStarted ? "em-andamento" : "nao-iniciado")
+
+  const statusClassName =
+    resolvedStatus === "concluido"
+      ? styles.statusCompleted
+      : resolvedStatus === "em-andamento"
+        ? styles.statusInProgress
+        : styles.statusNotStarted
+
   return (
     <div className={`${styles.root} ${className ?? ""}`}>
+      <span className={`${styles.statusBadge} ${statusClassName}`}>
+        {STATUS_LABELS[resolvedStatus]}
+      </span>
       {isPlaying ? (
-        <iframe
-          className={styles.iframe}
-          src={`https://www.youtube.com/embed/${id}?autoplay=1&rel=0`}
-          title={title ?? alt}
-          allow="autoplay; encrypted-media; picture-in-picture"
-          allowFullScreen
-        />
+        useApiFallback ? (
+          <iframe
+            className={styles.player}
+            src={`https://www.youtube.com/embed/${id}?autoplay=1&rel=0`}
+            title={title ?? alt}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <div ref={playerContainerRef} className={styles.player} />
+        )
       ) : (
         <button
           type="button"
           className={styles.thumbButton}
-          onClick={() => setIsPlaying(true)}
+          onClick={() => {
+            setHasStarted(true)
+            setIsPlaying(true)
+          }}
           aria-label="Reproduzir video"
         >
           <img

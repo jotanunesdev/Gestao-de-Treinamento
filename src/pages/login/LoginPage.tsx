@@ -4,10 +4,11 @@ import { useState } from "react"
 import { useReadView } from "../../shared/hooks/useReadView"
 import { useReadViewContext } from "../../app/readViewContext"
 import type { ReadViewResponse } from "../../shared/types/readView"
-import { ROUTES } from "../../app/routes"
+import { ROUTES } from "../../app/paths"
 import Button from "../../shared/ui/button/Button"
 import Input from "../../shared/ui/input/Input"
 import type { User } from "../../entities/types"
+import { maskCpf } from "../../shared/utils/maskCpf"
 
 const LoginPage = () => {
   const {loading, error, readView} = useReadView<ReadViewResponse>()
@@ -21,9 +22,11 @@ const LoginPage = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const {name, value} = e.target
 
+    const nextValue = name === "cpf" ? maskCpf(value) : value
+
     setUser(prev => ({
       ...prev,
-      [name]: value
+      [name]: nextValue
     }))
   }
 
@@ -44,6 +47,12 @@ const LoginPage = () => {
       navigate(ROUTES.main)
     } catch(e) {
       console.error(e)
+    }
+  }
+
+  const handleKeyDown = async(e: React.KeyboardEvent<HTMLInputElement>) => {
+    if(e.key == "Enter") {
+      handleSubmit()
     }
   }
 
@@ -83,6 +92,7 @@ const LoginPage = () => {
               name="dtNascimento"
               value={user.dtNascimento}
               onChange={handleChange}
+              onKeyDown={handleKeyDown}
               placeholder=""
             />
 

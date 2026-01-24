@@ -39,10 +39,10 @@
 }
 
 .ghost {
-    background-color: #fff;
-    color: var(--black-color);
+    background-color: var(--surface-bg);
+    color: var(--surface-text);
     width: auto;
-    border: 1px solid var(--black-color);
+    border: 1px solid var(--border-color);
 }
 
 .danger {

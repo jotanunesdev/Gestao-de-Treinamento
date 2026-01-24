@@ -1,13 +1,14 @@
 import { lazy } from 'react'
 import { Navigate, type RouteObject, useRoutes } from 'react-router-dom'
+import { MAIN_ROUTE_SEGMENTS, ROUTES } from './paths'
+import ProtectedRoute from './ProtectedRoute'
 
 const LoginPage = lazy(() => import('../pages/login/LoginPage'))
 const MainPage = lazy(() => import('../pages/main/MainPage'))
-
-export const ROUTES = {
-  login: '/login',
-  main: '/home',
-} as const
+const DashboardPage = lazy(() => import('../pages/main/DashboardPage'))
+const TrainingsPage = lazy(() => import('../pages/main/TrainingsPage'))
+const CompletedCoursesPage = lazy(() => import('../pages/main/CompletedCoursesPage'))
+const Instructor = lazy(() => import('../pages/main/Instructor'))
 
 const publicRoutes: RouteObject[] = [
   {
@@ -19,7 +20,33 @@ const publicRoutes: RouteObject[] = [
 const appRoutes: RouteObject[] = [
   {
     path: ROUTES.main,
-    element: <MainPage />,
+    element: (
+      <ProtectedRoute>
+        <MainPage />
+      </ProtectedRoute>
+    ),
+    children: [
+      {
+        index: true,
+        element: <Navigate to={ROUTES.mainDashboard} replace />,
+      },
+      {
+        path: MAIN_ROUTE_SEGMENTS.dashboard,
+        element: <DashboardPage />,
+      },
+      {
+        path: MAIN_ROUTE_SEGMENTS.trainings,
+        element: <TrainingsPage />,
+      },
+      {
+        path: MAIN_ROUTE_SEGMENTS.completed,
+        element: <CompletedCoursesPage />,
+      },
+      {
+        path: MAIN_ROUTE_SEGMENTS.instructor,
+        element: <Instructor />
+      }
+    ],
   },
 ]
 

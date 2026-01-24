@@ -2,46 +2,49 @@ import styles from "./main.module.css"
 
 // Components
 import Aside from "../../shared/ui/aside/Aside"
-import GaugeChart from "../../shared/ui/Gauge/GaugeChart"
-import YouTubeThumbnail from "../../shared/ui/video/YouTubeThumbnail"
-
-// Icons
+import Button from "../../shared/ui/button/Button"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
-import { faFile } from "@fortawesome/free-solid-svg-icons"
+import { faChartLine, faClipboardList, faCircleCheck, faChalkboardUser } from "@fortawesome/free-solid-svg-icons"
+import { useState } from "react"
 
 // Hooks
 import { useReadViewContext } from "../../app/readViewContext"
-import { NavLink } from "react-router-dom"
-import { useEffect } from "react"
+import { NavLink, Outlet, useNavigate } from "react-router-dom"
 import type { ReadViewResponse, PFuncItem } from "../../shared/types/readView"
+import { ROUTES } from "../../app/paths"
+import { applyTheme, getStoredTheme, setStoredTheme, type Theme } from "../../shared/theme"
+
+
+const MAIN_NAV_ITEMS = [
+  { id: "dashboard", label: "Dashboard", to: ROUTES.mainDashboard, icon: faChartLine },
+  { id: "trainings", label: "Treinamentos", to: ROUTES.mainTrainings, icon: faClipboardList },
+  { id: "completed", label: "Cursos Finalizados", to: ROUTES.mainCompleted, icon: faCircleCheck },
+  { id: "instructor", label: "Instrutor", to: ROUTES.instructor, icon: faChalkboardUser },
+] as const
 
 const MainPage = () => {
-  const { data } = useReadViewContext<ReadViewResponse>()
+  const { data, clearData } = useReadViewContext<ReadViewResponse>()
+  const navigate = useNavigate()
+  const [theme, setTheme] = useState<Theme>(() => getStoredTheme())
 
   const pfunc: PFuncItem | undefined = Array.isArray(data?.PFunc)
     ? data?.PFunc[0]
     : data?.PFunc
 
-  const supportMaterials = [
-    { id: "apostila", label: "Apostila da Aula" },
-    { id: "politica", label: "Política de Segurança do Trabalho" },
-    { id: "prova", label: "Responder Prova" },
-  ]
+  const handleToggleTheme = () => {
+    const nextTheme: Theme = theme === "dark" ? "light" : "dark"
+    setTheme(nextTheme)
+    setStoredTheme(nextTheme)
+    applyTheme(nextTheme)
+  }
 
-  useEffect(() => {
-    console.log(data)
-  }, [data])
-  
-
-  // const { pathname } = useLocation()
-  // const outlet = useOutlet()
-
-  
+  const handleLogout = () => {
+    clearData()
+    navigate(ROUTES.login, { replace: true })
+  }
 
   return (
-
     <div className={styles.main}>
-
       <Aside
         className={styles.asideSlot}
         logoSrc="/logo.webp"
@@ -51,83 +54,46 @@ const MainPage = () => {
         userSection={pfunc?.NOME_SECAO}
         userName={pfunc?.NOME}
       >
-
-        <nav className={styles.asideNav}>
-
-          <NavLink to="/main/comercial" className={({ isActive }) => isActive ? `${styles.asideLink} ${styles.asideLinkActive}` : styles.asideLink }>
-            Dashboard
-          </NavLink>
-
-          <NavLink to="/main/analista" className={({ isActive }) => isActive ? `${styles.asideLink} ${styles.asideLinkActive}` : styles.asideLink }>
-            Treinamentos
-          </NavLink>
-
-          <NavLink to="/main/analista" className={({ isActive }) => isActive ? `${styles.asideLink} ${styles.asideLinkActive}` : styles.asideLink }>
-            Cursos Finalizados
-          </NavLink>
-
-        </nav>
-
+        <div className={styles.asideContent}>
+          <nav className={styles.asideNav}>
+            {MAIN_NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.id}
+                to={item.to}
+                className={({ isActive }) =>
+                  isActive
+                    ? `${styles.asideLink} ${styles.asideLinkActive}`
+                    : styles.asideLink
+                }
+              >
+                <FontAwesomeIcon icon={item.icon} className={styles.asideLinkIcon} />
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className={styles.asideFooter}>
+            <div className={styles.themeToggle}>
+              <span className={styles.themeLabel}>Modo escuro</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={theme === "dark"}
+                aria-label="Alternar modo escuro"
+                className={styles.themeSwitch}
+                data-checked={theme === "dark"}
+                onClick={handleToggleTheme}
+              >
+                <span className={styles.themeThumb} aria-hidden="true" />
+              </button>
+            </div>
+            <Button text="Sair" variant="ghost" fullWidth onClick={handleLogout} />
+          </div>
+        </div>
       </Aside>
 
-      <header className={styles.nav}>
-        <div>
-          <h1 className={styles.navTitle}>Painel</h1>
-          <p className={styles.navSubtitle}>Resumo dos Cursos</p>
-        </div>
-
-        <GaugeChart width={100} heigth={100} value={60} totalValue={101}/>
-        
-
-      </header>
-
-      <section className={styles.content}>
-        {/* {outlet ?? (
-
-          <div className={styles.contentCard}>
-
-            <h2>Conteudo principal</h2>
-
-            <p>Coloque aqui os seus widgets e informacoes.</p>
-
-          </div>
-
-        )} */}
-
-        <div className={styles.contentCard}>
-
-          <h2>Continue de onde você parou</h2>
-
-          <p>Continue os seus treinamentos clicando no video abaixo.</p>
-
-          <div className={styles.video_section}>
-            <div className={styles.video_content}>
-              <YouTubeThumbnail video="https://www.youtube.com/watch?v=7pOr3dBFAeY&list=RDr00ikilDxW4&index=6" className="thumb" />
-            </div>
-            <div className={styles.material}>
-              <h2>Material de Apoio</h2>
-              <div className={styles.apoio}>
-                {supportMaterials.map((item) => (
-                  <button key={item.id} type="button" className={styles.apoioItem}>
-                    <FontAwesomeIcon icon={faFile} className={styles.apoioIcon} />
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-
-      </section>
-
+      <Outlet />
     </div>
-
   )
-
 }
-
-
 
 export default MainPage

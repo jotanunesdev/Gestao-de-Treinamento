@@ -2,8 +2,9 @@ input {
     padding: .65rem;
     width: 100%;
     border-radius: 5px;
-    background-color: #f6f6f6;
+    background-color: var(--input-bg);
     border: 2px solid transparent;
+    color: var(--surface-text);
     transition: border-color .2s ease;
 }
 

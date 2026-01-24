@@ -9,6 +9,36 @@
   --warning-color: #ffc222;
   --succes-color: #80ef80;
   --box-shadow: 0px 2px 25px -6px rgba(0,0,0,0.75);
+  --app-bg: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  --surface-bg: #ffffff;
+  --surface-muted-bg: #f8fafc;
+  --surface-text: #1a1a1a;
+  --surface-muted-text: #666666;
+  --surface-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  --border-color: #e2e8f0;
+  --input-bg: #f6f6f6;
+  --sidebar-link-bg: #f1f5f9;
+  --media-bg: #0f1115;
+}
+
+[data-theme="dark"] {
+  --primary-color: #ef4444;
+  --secondary-color: #1f2937;
+  --white-color: #f8fafc;
+  --danger-color: #f87171;
+  --warning-color: #fbbf24;
+  --succes-color: #4ade80;
+  --box-shadow: 0px 4px 20px -8px rgba(0,0,0,0.85);
+  --app-bg: linear-gradient(135deg, #0f172a 0%, #1f2937 100%);
+  --surface-bg: #111827;
+  --surface-muted-bg: #0f172a;
+  --surface-text: #f8fafc;
+  --surface-muted-text: #94a3b8;
+  --surface-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  --border-color: #334155;
+  --input-bg: #0f172a;
+  --sidebar-link-bg: #0f172a;
+  --media-bg: #0b0f17;
 }
 
 * {
@@ -27,4 +57,6 @@ body,
 
 body {
   overflow: hidden;
+  background: var(--app-bg);
+  color: var(--surface-text);
 }

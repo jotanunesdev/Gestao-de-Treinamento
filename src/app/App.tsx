@@ -1,10 +1,15 @@
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import { BrowserRouter } from 'react-router-dom'
 import './App.css'
 import { AppRoutes } from './routes'
 import { ReadViewProvider } from './readViewContext'
+import { applyTheme, getStoredTheme } from '../shared/theme'
 
 function App() {
+  useEffect(() => {
+    applyTheme(getStoredTheme())
+  }, [])
+
   return (
     <BrowserRouter>
       <ReadViewProvider>
