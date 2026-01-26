@@ -9,6 +9,7 @@ import Button from "../../shared/ui/button/Button"
 import Input from "../../shared/ui/input/Input"
 import type { User } from "../../entities/types"
 import { maskCpf } from "../../shared/utils/maskCpf"
+import { getStoredTheme } from "../../shared/theme"
 
 const LoginPage = () => {
   const {loading, error, readView} = useReadView<ReadViewResponse>()
@@ -18,6 +19,7 @@ const LoginPage = () => {
     cpf: "",
     dtNascimento: ""
   })
+  const logoSrc = getStoredTheme() === "dark" ? "/logo-branca.png" : "/logo.webp"
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const {name, value} = e.target
@@ -60,7 +62,7 @@ const LoginPage = () => {
     <div className={styles.login}>
       <div className={styles.login_container}>
         <div className={styles.login_header}>
-          <img src="/logo.webp" alt="jota-logo" className={styles.logo} />
+          <img src={logoSrc} alt="jota-logo" className={styles.logo} />
           <h1>Bem vindo(a)!</h1>
           <p>Plataforma oficial de treinamentos da JotaNunes. Acesse com sua conta com <strong>CPF</strong> e <strong>Data de Nascimento</strong></p>
         </div>

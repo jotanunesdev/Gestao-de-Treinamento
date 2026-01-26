@@ -8,6 +8,11 @@ input {
     transition: border-color .2s ease;
 }
 
+input::placeholder {
+    color: var(--input-placeholder);
+    opacity: 1;
+}
+
 input:focus {
     border-color: var(--primary-color);
     outline: none;

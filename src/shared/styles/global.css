@@ -17,6 +17,7 @@
   --surface-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
   --border-color: #e2e8f0;
   --input-bg: #f6f6f6;
+  --input-placeholder: var(--surface-muted-text);
   --sidebar-link-bg: #f1f5f9;
   --media-bg: #0f1115;
 }
@@ -37,6 +38,7 @@
   --surface-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
   --border-color: #334155;
   --input-bg: #0f172a;
+  --input-placeholder: var(--white-color);
   --sidebar-link-bg: #0f172a;
   --media-bg: #0b0f17;
 }

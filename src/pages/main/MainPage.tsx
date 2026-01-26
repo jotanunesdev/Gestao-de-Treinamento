@@ -43,11 +43,13 @@ const MainPage = () => {
     navigate(ROUTES.login, { replace: true })
   }
 
+  const logoSrc = theme === "dark" ? "/logo-branca.png" : "/logo.webp"
+
   return (
     <div className={styles.main}>
       <Aside
         className={styles.asideSlot}
-        logoSrc="/logo.webp"
+        logoSrc={logoSrc}
         title="Bem Vindo(a)!"
         userCompany={pfunc?.NOMEFILIAL}
         userFunction={pfunc?.NOME_FUNCAO}
