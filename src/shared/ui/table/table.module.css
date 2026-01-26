@@ -1,0 +1,171 @@
+.tableWrapper {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 0;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 220px;
+}
+
+.searchInput label {
+  margin: 0;
+}
+
+.searchButton {
+  display: flex;
+  align-items: center;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  color: var(--surface-text);
+}
+
+.thead {
+  background: var(--surface-muted-bg);
+}
+
+.tbody {
+  background: var(--surface-bg);
+}
+
+.headerRow {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.th {
+  padding: 0.75rem 1rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--surface-muted-text);
+  font-weight: 700;
+}
+
+.td {
+  padding: 0.85rem 1rem;
+  border-top: 1px solid var(--border-color);
+  color: var(--surface-text);
+  font-size: 0.95rem;
+}
+
+.row:hover .td {
+  background: var(--surface-muted-bg);
+}
+
+.alignLeft {
+  text-align: left;
+}
+
+.alignCenter {
+  text-align: center;
+}
+
+.alignRight {
+  text-align: right;
+}
+
+.checkboxHeader {
+  width: 44px;
+  text-align: center;
+}
+
+.checkboxCell {
+  text-align: center;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 1rem 0.75rem;
+  flex-wrap: wrap;
+}
+
+.paginationInfo {
+  font-size: 0.85rem;
+  color: var(--surface-muted-text);
+  font-weight: 600;
+}
+
+.paginationActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.paginationPage {
+  font-size: 0.85rem;
+  color: var(--surface-text);
+  font-weight: 600;
+}
+
+.emptyCell {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--surface-muted-text);
+  font-weight: 600;
+}
+
+.dense .th {
+  padding: 0.6rem 0.85rem;
+}
+
+.dense .td {
+  padding: 0.65rem 0.85rem;
+}
+
+.dense .caption {
+  padding: 0.55rem 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .table {
+    min-width: 480px;
+  }
+
+  .th {
+    font-size: 0.72rem;
+  }
+
+  .td {
+    font-size: 0.9rem;
+  }
+}

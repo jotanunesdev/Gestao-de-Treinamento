@@ -1,0 +1,71 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 200;
+}
+
+.modal {
+  width: min(880px, 96vw);
+  max-height: 92vh;
+  background: var(--surface-bg);
+  border-radius: 18px;
+  box-shadow: var(--surface-shadow);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+}
+
+.md {
+  width: min(720px, 92vw);
+}
+
+.lg {
+  width: min(960px, 96vw);
+}
+
+.full {
+  width: 96vw;
+  height: 92vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--surface-text);
+}
+
+.close {
+  border: none;
+  background: var(--surface-muted-bg);
+  color: var(--surface-text);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.close:hover {
+  transform: translateY(-1px);
+  background: var(--sidebar-link-bg);
+}
+
+.body {
+  padding: 1.25rem 1.5rem 1.5rem;
+  overflow: auto;
+  flex: 1;
+}
