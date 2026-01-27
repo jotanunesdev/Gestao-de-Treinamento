@@ -9,6 +9,7 @@ const DashboardPage = lazy(() => import('../pages/main/DashboardPage'))
 const TrainingsPage = lazy(() => import('../pages/main/TrainingsPage'))
 const CompletedCoursesPage = lazy(() => import('../pages/main/CompletedCoursesPage'))
 const Instructor = lazy(() => import('../pages/main/Instructor'))
+const SystemSettingsPage = lazy(() => import('../pages/main/SystemSettingsPage'))
 
 const publicRoutes: RouteObject[] = [
   {
@@ -44,8 +45,12 @@ const appRoutes: RouteObject[] = [
       },
       {
         path: MAIN_ROUTE_SEGMENTS.instructor,
-        element: <Instructor />
-      }
+        element: <Instructor />,
+      },
+      {
+        path: MAIN_ROUTE_SEGMENTS.settings,
+        element: <SystemSettingsPage />,
+      },
     ],
   },
 ]

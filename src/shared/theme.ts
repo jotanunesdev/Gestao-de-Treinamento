@@ -1,6 +1,7 @@
 export type Theme = 'light' | 'dark'
 
 const STORAGE_KEY = 'gestao-treinamento:theme'
+export const THEME_CHANGE_EVENT = 'gestao-treinamento:themechange'
 
 export function getStoredTheme(): Theme {
   if (typeof sessionStorage === 'undefined') {
@@ -26,4 +27,9 @@ export function applyTheme(theme: Theme) {
 
   document.documentElement.dataset.theme = theme
   document.documentElement.style.colorScheme = theme
+  document.dispatchEvent(
+    new CustomEvent<Theme>(THEME_CHANGE_EVENT, {
+      detail: theme,
+    }),
+  )
 }

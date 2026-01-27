@@ -13,3 +13,20 @@ export function maskCpf(value: string) {
 
   return masked
 }
+
+export function maskCpfRestricted(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+
+  if (digits.length <= 3) {
+    return digits
+  }
+
+  const part1 = digits.slice(0, 3)
+  const part4 = digits.slice(9, 11)
+
+  if (digits.length < 11) {
+    return `${part1}.***.***-**`
+  }
+
+  return `${part1}.***.***-${part4}`
+}

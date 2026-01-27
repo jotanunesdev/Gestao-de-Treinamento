@@ -1,4 +1,5 @@
 export interface User {
     cpf: string,
-    dtNascimento: string
+    dtNascimento: string,
+    password: string
 }

@@ -4,22 +4,35 @@ import styles from "./main.module.css"
 import Aside from "../../shared/ui/aside/Aside"
 import Button from "../../shared/ui/button/Button"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
-import { faChartLine, faClipboardList, faCircleCheck, faChalkboardUser } from "@fortawesome/free-solid-svg-icons"
-import { useState } from "react"
+import {
+  faChartLine,
+  faClipboardList,
+  faCircleCheck,
+  faChalkboardUser,
+  faGear,
+} from "@fortawesome/free-solid-svg-icons"
+import { useEffect, useState } from "react"
 
 // Hooks
 import { useReadViewContext } from "../../app/readViewContext"
 import { NavLink, Outlet, useNavigate } from "react-router-dom"
 import type { ReadViewResponse, PFuncItem } from "../../shared/types/readView"
 import { ROUTES } from "../../app/paths"
-import { applyTheme, getStoredTheme, setStoredTheme, type Theme } from "../../shared/theme"
-
+import { clearActiveCpf } from "../../shared/auth/passwordStore"
+import {
+  applyTheme,
+  getStoredTheme,
+  setStoredTheme,
+  THEME_CHANGE_EVENT,
+  type Theme,
+} from "../../shared/theme"
 
 const MAIN_NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", to: ROUTES.mainDashboard, icon: faChartLine },
   { id: "trainings", label: "Treinamentos", to: ROUTES.mainTrainings, icon: faClipboardList },
   { id: "completed", label: "Cursos Finalizados", to: ROUTES.mainCompleted, icon: faCircleCheck },
   { id: "instructor", label: "Instrutor", to: ROUTES.instructor, icon: faChalkboardUser },
+  { id: "settings", label: "Configuracao", to: ROUTES.settings, icon: faGear },
 ] as const
 
 const MainPage = () => {
@@ -31,6 +44,20 @@ const MainPage = () => {
     ? data?.PFunc[0]
     : data?.PFunc
 
+  useEffect(() => {
+    const handleThemeChange = (event: Event) => {
+      const customEvent = event as CustomEvent<Theme>
+      const nextTheme = customEvent.detail ?? getStoredTheme()
+      setTheme(nextTheme)
+    }
+
+    document.addEventListener(THEME_CHANGE_EVENT, handleThemeChange)
+
+    return () => {
+      document.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange)
+    }
+  }, [])
+
   const handleToggleTheme = () => {
     const nextTheme: Theme = theme === "dark" ? "light" : "dark"
     setTheme(nextTheme)
@@ -39,6 +66,7 @@ const MainPage = () => {
   }
 
   const handleLogout = () => {
+    clearActiveCpf()
     clearData()
     navigate(ROUTES.login, { replace: true })
   }

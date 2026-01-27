@@ -16,11 +16,14 @@ type EmployeeRow = {
     CPF_SEARCH: string
 }
 
+type TrainingType = "video" | "pdf"
+
 type TrainingRow = {
     id: string
     link: string
     titulo: string
     tempo_video: string
+    tipo: TrainingType
 }
 
 type YouTubePlayer = {
@@ -123,26 +126,35 @@ type QueuePlayerProps = {
 const QueuePlayer = ({ video, title, onEnded }: QueuePlayerProps) => {
     const id = useMemo(() => getYouTubeId(video), [video])
     const playerRef = useRef<YouTubePlayer | null>(null)
-    const containerRef = useRef<HTMLDivElement | null>(null)
+    const wrapperRef = useRef<HTMLDivElement | null>(null)
 
     useEffect(() => {
-        if (!id || !containerRef.current) {
+        if (!id || !wrapperRef.current) {
             return undefined
         }
 
         let cancelled = false
+        const wrapper = wrapperRef.current
+        const host = document.createElement("div")
+        host.style.width = "100%"
+        host.style.height = "100%"
+        wrapper.replaceChildren(host)
 
         loadYouTubeApi()
             .then((YT) => {
-                if (cancelled || !containerRef.current) {
+                if (cancelled) {
                     return
                 }
 
                 if (playerRef.current) {
-                    playerRef.current.destroy()
+                    try {
+                        playerRef.current.destroy()
+                    } catch {
+                        // ignore teardown errors from third-party API
+                    }
                 }
 
-                playerRef.current = new YT.Player(containerRef.current, {
+                playerRef.current = new YT.Player(host, {
                     videoId: id,
                     width: "100%",
                     height: "100%",
@@ -164,8 +176,15 @@ const QueuePlayer = ({ video, title, onEnded }: QueuePlayerProps) => {
         return () => {
             cancelled = true
             if (playerRef.current) {
-                playerRef.current.destroy()
+                try {
+                    playerRef.current.destroy()
+                } catch {
+                    // ignore teardown errors from third-party API
+                }
                 playerRef.current = null
+            }
+            if (wrapper.isConnected) {
+                wrapper.replaceChildren()
             }
         }
     }, [id, onEnded])
@@ -180,7 +199,7 @@ const QueuePlayer = ({ video, title, onEnded }: QueuePlayerProps) => {
 
     return (
         <div
-            ref={containerRef}
+            ref={wrapperRef}
             className={styles.trainingPlayerFrame}
             aria-label={title ?? "Video"}
         />
@@ -193,13 +212,16 @@ const Instructor = () => {
     const [trainings, setTrainings] = useState<TrainingRow[]>([])
     const [showTable, setShowTable] = useState(false)
     const [showTrainingsTable, setShowTrainingsTable] = useState(false)
+    const [trainingViewType, setTrainingViewType] = useState<TrainingType>("video")
     const [isLoading, setIsLoading] = useState(false)
     const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
     const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([])
     const [orderedCourseIds, setOrderedCourseIds] = useState<string[]>([])
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isTrainingStarted, setIsTrainingStarted] = useState(false)
-    const [currentVideoId, setCurrentVideoId] = useState<string | null>(null)
+    const [currentTrainingId, setCurrentTrainingId] = useState<string | null>(null)
+    const [isPdfFullscreen, setIsPdfFullscreen] = useState(false)
+    const pdfContainerRef = useRef<HTMLDivElement | null>(null)
 
     const columns = useMemo<TableColumn<EmployeeRow>[]>(
         () => [
@@ -214,7 +236,7 @@ const Instructor = () => {
         [],
     )
 
-    const trainingColumns = useMemo<TableColumn<TrainingRow>[]>(
+    const trainingVideoColumns = useMemo<TableColumn<TrainingRow>[]>(
         () => [
             {
                 key: "thumbnail",
@@ -238,6 +260,28 @@ const Instructor = () => {
         [],
     )
 
+    const trainingPdfColumns = useMemo<TableColumn<TrainingRow>[]>(
+        () => [
+            {
+                key: "pdf",
+                header: "PDF",
+                render: (row) =>
+                    row.link ? (
+                        <div className={styles.trainingThumbWrapper}>
+                            <div className={styles.trainingPdfThumb}>
+                                <span className={styles.trainingPdfThumbLabel}>PDF</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className={styles.trainingThumbPlaceholder}>Sem PDF</div>
+                    ),
+                width: "160px",
+            },
+            { key: "titulo", header: "Titulo" },
+        ],
+        [],
+    )
+
     const trainingsMap = useMemo(() => {
         return new Map(trainings.map((training) => [training.id, training]))
     }, [trainings])
@@ -248,6 +292,19 @@ const Instructor = () => {
             .filter((item): item is TrainingRow => Boolean(item))
     }, [orderedCourseIds, trainingsMap])
 
+    const filteredTrainings = useMemo(() => {
+        return trainings.filter((training) => training.tipo === trainingViewType)
+    }, [trainings, trainingViewType])
+
+    const trainingColumns =
+        trainingViewType === "video" ? trainingVideoColumns : trainingPdfColumns
+
+    const isPlayableTraining = useCallback((course: TrainingRow) => {
+        if (!course.link) return false
+        if (course.tipo === "pdf") return true
+        return Boolean(getYouTubeId(course.link))
+    }, [])
+
     useEffect(() => {
         setOrderedCourseIds((prev) => {
             const kept = prev.filter((id) => selectedCourseIds.includes(id))
@@ -257,42 +314,91 @@ const Instructor = () => {
     }, [selectedCourseIds])
 
     useEffect(() => {
-        if (currentVideoId && !orderedCourseIds.includes(currentVideoId)) {
-            setCurrentVideoId(null)
+        if (currentTrainingId && !orderedCourseIds.includes(currentTrainingId)) {
+            setCurrentTrainingId(null)
             setIsTrainingStarted(false)
         }
-    }, [currentVideoId, orderedCourseIds])
+    }, [currentTrainingId, orderedCourseIds])
+
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsPdfFullscreen(document.fullscreenElement === pdfContainerRef.current)
+        }
+
+        document.addEventListener("fullscreenchange", handleFullscreenChange)
+        return () => {
+            document.removeEventListener("fullscreenchange", handleFullscreenChange)
+        }
+    }, [])
 
     const canOpenTraining =
         selectedParticipantIds.length > 0 && selectedCourseIds.length > 0
 
-    const currentVideo = currentVideoId ? trainingsMap.get(currentVideoId) ?? null : null
+    const currentTraining = currentTrainingId ? trainingsMap.get(currentTrainingId) ?? null : null
+    // Compatibilidade com estados antigos durante HMR.
+    const currentVideo = currentTraining
+    const currentVideoId = currentTrainingId
 
-    const handleStartTraining = useCallback(() => {
-        const firstPlayable = orderedCourses.find((course) => course.link)
-        const firstCourse = firstPlayable ?? orderedCourses[0]
-        if (!firstCourse) return
-        setCurrentVideoId(firstCourse.id)
-        setIsTrainingStarted(true)
-    }, [orderedCourses])
-
-    const handleVideoEnded = useCallback(() => {
-        if (!currentVideoId) return
-        const currentIndex = orderedCourseIds.indexOf(currentVideoId)
+    const advanceToNextTraining = useCallback((fromId: string) => {
+        const currentIndex = orderedCourseIds.indexOf(fromId)
         if (currentIndex < 0) {
             setIsTrainingStarted(false)
+            setCurrentTrainingId(null)
             return
         }
+
         const nextCourse = orderedCourseIds
             .slice(currentIndex + 1)
             .map((id) => trainingsMap.get(id))
-            .find((course): course is TrainingRow => Boolean(course && course.link))
+            .find((course): course is TrainingRow => Boolean(course && isPlayableTraining(course)))
+
         if (nextCourse) {
-            setCurrentVideoId(nextCourse.id)
+            setCurrentTrainingId(nextCourse.id)
         } else {
             setIsTrainingStarted(false)
+            setCurrentTrainingId(null)
         }
-    }, [currentVideoId, orderedCourseIds, trainingsMap])
+    }, [orderedCourseIds, trainingsMap, isPlayableTraining])
+
+    const hasNextTraining = useMemo(() => {
+        if (!currentTrainingId) return false
+        const currentIndex = orderedCourseIds.indexOf(currentTrainingId)
+        if (currentIndex < 0) return false
+        return orderedCourseIds
+            .slice(currentIndex + 1)
+            .map((id) => trainingsMap.get(id))
+            .some((course) => Boolean(course && isPlayableTraining(course)))
+    }, [currentTrainingId, orderedCourseIds, trainingsMap, isPlayableTraining])
+
+    const handleStartTraining = useCallback(() => {
+        const firstPlayable = orderedCourses.find(isPlayableTraining)
+        const firstCourse = firstPlayable ?? orderedCourses[0]
+        if (!firstCourse) return
+        setCurrentTrainingId(firstCourse.id)
+        setIsTrainingStarted(true)
+    }, [orderedCourses, isPlayableTraining])
+
+    const handleVideoEnded = useCallback(() => {
+        if (!currentTrainingId) return
+        advanceToNextTraining(currentTrainingId)
+    }, [advanceToNextTraining, currentTrainingId])
+
+    const handleNextFromPdf = useCallback(() => {
+        if (!currentTrainingId) return
+        advanceToNextTraining(currentTrainingId)
+    }, [advanceToNextTraining, currentTrainingId])
+
+    const handleTogglePdfFullscreen = useCallback(() => {
+        const container = pdfContainerRef.current
+        if (!container) return
+
+        if (document.fullscreenElement === container) {
+            document.exitFullscreen().catch(() => undefined)
+            return
+        }
+
+        container.requestFullscreen?.().catch(() => undefined)
+    }, [])
 
     const moveCourse = useCallback((id: string, direction: -1 | 1) => {
         setOrderedCourseIds((prev) => {
@@ -312,14 +418,18 @@ const Instructor = () => {
     const handleOpenModal = () => {
         if (!canOpenTraining) return
         setIsTrainingStarted(false)
-        setCurrentVideoId(null)
+        setCurrentTrainingId(null)
         setIsModalOpen(true)
     }
 
     const handleCloseModal = () => {
+        if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => undefined)
+        }
         setIsModalOpen(false)
         setIsTrainingStarted(false)
-        setCurrentVideoId(null)
+        setCurrentTrainingId(null)
+        setIsPdfFullscreen(false)
     }
 
     const handleClick = async () => {
@@ -327,12 +437,13 @@ const Instructor = () => {
             setIsLoading(true)
             setShowTable(false)
             setShowTrainingsTable(false)
+            setTrainingViewType("video")
             setSelectedParticipantIds([])
             setSelectedCourseIds([])
             setOrderedCourseIds([])
             setIsModalOpen(false)
             setIsTrainingStarted(false)
-            setCurrentVideoId(null)
+            setCurrentTrainingId(null)
             console.log("Buscando funcionarios RM...")
             const result = await readView({
                 dataServerName: "FopFuncData",
@@ -383,12 +494,16 @@ const Instructor = () => {
             }
             const trainingsJson = await trainingsResponse.json()
             const trainingsList: TrainingRow[] = Array.isArray(trainingsJson)
-                ? trainingsJson.map((item, index) => ({
-                    id: `${index}`,
-                    link: typeof item?.link === "string" ? item.link : "",
-                    titulo: typeof item?.titulo === "string" ? item.titulo : "",
-                    tempo_video: typeof item?.tempo_video === "string" ? item.tempo_video : "",
-                }))
+                ? trainingsJson.map((item, index) => {
+                    const tipo: TrainingType = item?.tipo === "pdf" ? "pdf" : "video"
+                    return {
+                        id: `${tipo}-${index}`,
+                        tipo,
+                        link: typeof item?.link === "string" ? item.link : "",
+                        titulo: typeof item?.titulo === "string" ? item.titulo : "",
+                        tempo_video: typeof item?.tempo_video === "string" ? item.tempo_video : "",
+                    }
+                })
                 : []
             setTrainings(trainingsList)
             setShowTrainingsTable(true)
@@ -401,12 +516,12 @@ const Instructor = () => {
 
     return (
         <>
-            <header className={styles.nav}>
+            {/* <header className={styles.nav}>
                 <div>
                     <h1 className={styles.navTitle}>Intrutor</h1>
                     <p className={styles.navSubtitle}>Acompanhe os treinamentos dos colaboradores em andamento</p>
                 </div>
-            </header>
+            </header> */}
 
             <section className={styles.content}>
                 <div className={styles.contentCard}>
@@ -421,7 +536,7 @@ const Instructor = () => {
                     <div className={styles.tables_content}>
                         {showTable ? (
                             <div>
-                                <h4>Lista de Presenca</h4>
+                                <h4 style={{marginBottom: "10px"}}>Lista de Presença</h4>
                                 <Table
                                     columns={columns}
                                     data={employees}
@@ -438,19 +553,44 @@ const Instructor = () => {
                         ) : null}
 
                         {showTrainingsTable ? (
-                            <div>
-                                <h4>Cursos</h4>
+                            <div className={styles.trainingTableSection}>
+                                <div className={styles.trainingTableHeader}>
+                                    <h4 style={{marginBottom: "10px"}}>Materiais</h4>
+                                    <div className={styles.trainingTypeToggle} role="group" aria-label="Tipo de material">
+                                        <Button
+                                            text="Videos"
+                                            size="sm"
+                                            variant={trainingViewType === "video" ? "primary" : "ghost"}
+                                            onClick={() => setTrainingViewType("video")}
+                                        />
+                                        <Button
+                                            text="PDFs"
+                                            size="sm"
+                                            variant={trainingViewType === "pdf" ? "primary" : "ghost"}
+                                            onClick={() => setTrainingViewType("pdf")}
+                                        />
+                                    </div>
+                                </div>
                                 <Table
                                     columns={trainingColumns}
-                                    data={trainings}
+                                    data={filteredTrainings}
                                     selectable
                                     searchable
-                                    pageSize={10}
+                                    pageSize={4}
                                     searchableKeys={["titulo"]}
+                                    selectedRowIds={selectedCourseIds}
                                     onSelectionChange={setSelectedCourseIds}
                                     getRowId={(row) => row.id}
-                                    emptyMessage="Nenhum treinamento encontrado."
-                                    searchPlaceholder="Buscar por titulo"
+                                    emptyMessage={
+                                        trainingViewType === "video"
+                                            ? "Nenhum video encontrado."
+                                            : "Nenhum PDF encontrado."
+                                    }
+                                    searchPlaceholder={
+                                        trainingViewType === "video"
+                                            ? "Buscar por titulo do video"
+                                            : "Buscar por titulo do PDF"
+                                    }
                                 />
                             </div>
                         ) : null}
@@ -459,7 +599,7 @@ const Instructor = () => {
                             <div className={styles.trainingActionInfo}>
                                 <span className={styles.trainingActionTitle}>Pronto para iniciar?</span>
                                 <span className={styles.trainingActionHint}>
-                                    Selecionados: {selectedParticipantIds.length} participantes e {selectedCourseIds.length} cursos.
+                                    Selecionados: {selectedParticipantIds.length} participantes e {selectedCourseIds.length} materiais.
                                 </span>
                             </div>
                             <Button
@@ -481,7 +621,7 @@ const Instructor = () => {
                 <div className={styles.trainingModal}>
                     <div className={styles.trainingModalHeader}>
                         <div>
-                            <h4 className={styles.trainingModalTitle}>Ordene os videos</h4>
+                            <h4 className={styles.trainingModalTitle}>Ordene os materiais</h4>
                             <p className={styles.trainingModalHint}>
                                 Ajuste a fila antes de iniciar o treinamento.
                             </p>
@@ -496,29 +636,53 @@ const Instructor = () => {
                         <div className={styles.trainingPlayerPanel}>
                             <div className={styles.trainingPlayerHeader}>
                                 <span className={styles.trainingPlayerTitle}>
-                                    {currentVideo?.titulo ?? "Selecione um video"}
+                                    {currentTraining?.titulo ?? "Selecione um material"}
                                 </span>
-                                {currentVideo?.tempo_video ? (
+                                {currentTraining ? (
                                     <span className={styles.trainingPlayerMeta}>
-                                        {currentVideo.tempo_video}
+                                        {currentTraining.tipo === "video"
+                                            ? currentTraining.tempo_video || "Video"
+                                            : "PDF"}
                                     </span>
                                 ) : null}
                             </div>
-                            {isTrainingStarted && currentVideo ? (
-                                <QueuePlayer
-                                    video={currentVideo.link}
-                                    title={currentVideo.titulo}
-                                    onEnded={handleVideoEnded}
-                                />
+                            {isTrainingStarted && currentTraining ? (
+                                currentTraining.tipo === "video" ? (
+                                    <QueuePlayer
+                                        video={currentTraining.link}
+                                        title={currentTraining.titulo}
+                                        onEnded={handleVideoEnded}
+                                    />
+                                ) : (
+                                    <div ref={pdfContainerRef} className={styles.trainingPdfContainer}>
+                                        <iframe
+                                            className={styles.trainingPdfFrame}
+                                            src={currentTraining.link}
+                                            title={currentTraining.titulo || "PDF"}
+                                        />
+                                        <div className={styles.trainingPdfActions}>
+                                            <Button
+                                                text={isPdfFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                                                variant="ghost"
+                                                onClick={handleTogglePdfFullscreen}
+                                            />
+                                            <Button
+                                                text="Proximo"
+                                                onClick={handleNextFromPdf}
+                                                disabled={!hasNextTraining}
+                                            />
+                                        </div>
+                                    </div>
+                                )
                             ) : (
                                 <div className={styles.trainingPlayerPlaceholder}>
-                                    Clique em iniciar para reproduzir os videos.
+                                    Clique em iniciar para reproduzir os materiais.
                                 </div>
                             )}
                         </div>
                         <div className={styles.trainingQueuePanel}>
                             <div className={styles.trainingQueueHeader}>
-                                <h4>Fila de videos</h4>
+                                <h4>Fila de materiais</h4>
                                 <span className={styles.trainingQueueCount}>
                                     {orderedCourses.length} selecionados
                                 </span>
@@ -529,17 +693,28 @@ const Instructor = () => {
                                         <li
                                             key={course.id}
                                             className={`${styles.trainingQueueItem} ${
-                                                course.id === currentVideoId
+                                                course.id === currentTrainingId
                                                     ? styles.trainingQueueActive
                                                     : ""
                                             }`}
                                         >
                                             <div className={styles.trainingQueueInfo}>
+                                                <span
+                                                    className={`${styles.trainingQueueTypeBadge} ${
+                                                        course.tipo === "pdf"
+                                                            ? styles.trainingQueueTypePdf
+                                                            : styles.trainingQueueTypeVideo
+                                                    }`}
+                                                >
+                                                    {course.tipo === "pdf" ? "PDF" : "Video"}
+                                                </span>
                                                 <span className={styles.trainingQueueTitle}>
                                                     {course.titulo || "Sem titulo"}
                                                 </span>
                                                 <span className={styles.trainingQueueMeta}>
-                                                    {course.tempo_video || "Sem tempo informado"}
+                                                    {course.tipo === "video"
+                                                        ? course.tempo_video || "Sem tempo informado"
+                                                        : "Material PDF"}
                                                 </span>
                                             </div>
                                             <div className={styles.trainingQueueActions}>
@@ -563,7 +738,7 @@ const Instructor = () => {
                                 </ul>
                             ) : (
                                 <div className={styles.trainingQueueEmpty}>
-                                    Selecione cursos na tabela para montar a fila.
+                                    Selecione materiais na tabela para montar a fila.
                                 </div>
                             )}
                         </div>

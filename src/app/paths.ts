@@ -2,7 +2,8 @@ export const MAIN_ROUTE_SEGMENTS = {
   dashboard: 'dashboard',
   trainings: 'treinamentos',
   completed: 'cursos-finalizados',
-  instructor: 'instrutor'
+  instructor: 'instrutor',
+  settings: 'configuracao',
 } as const
 
 export const ROUTES = {
@@ -12,4 +13,5 @@ export const ROUTES = {
   mainTrainings: `/home/${MAIN_ROUTE_SEGMENTS.trainings}`,
   mainCompleted: `/home/${MAIN_ROUTE_SEGMENTS.completed}`,
   instructor: `/home/${MAIN_ROUTE_SEGMENTS.instructor}`,
+  settings: `/home/${MAIN_ROUTE_SEGMENTS.settings}`,
 } as const
