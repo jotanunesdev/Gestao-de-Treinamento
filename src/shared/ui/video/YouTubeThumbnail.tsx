@@ -29,6 +29,7 @@ type Props = {
   className?: string
   title?: string
   status?: VideoStatus
+  onCompleted?: () => void
 }
 
 type YouTubePlayer = {
@@ -113,7 +114,8 @@ export default function YouTubeThumbnail({
   alt = "Capa do video",
   className,
   title,
-  status
+  status,
+  onCompleted,
 }: Props) {
   const id = useMemo(() => getYouTubeId(video), [video])
   const [useFallback, setUseFallback] = useState(false)
@@ -160,6 +162,7 @@ export default function YouTubeThumbnail({
               }
               if (event.data === YT.PlayerState.ENDED) {
                 setHasCompleted(true)
+                onCompleted?.()
               }
             },
           },
@@ -178,7 +181,7 @@ export default function YouTubeThumbnail({
         playerRef.current = null
       }
     }
-  }, [id, isPlaying, useApiFallback])
+  }, [id, isPlaying, onCompleted, useApiFallback])
 
   const resolvedStatus: VideoStatus =
     status ?? (hasCompleted ? "concluido" : hasStarted ? "em-andamento" : "nao-iniciado")

@@ -2,6 +2,7 @@ import { lazy } from 'react'
 import { Navigate, type RouteObject, useRoutes } from 'react-router-dom'
 import { MAIN_ROUTE_SEGMENTS, ROUTES } from './paths'
 import ProtectedRoute from './ProtectedRoute'
+import InstructorRoute from './InstructorRoute'
 
 const LoginPage = lazy(() => import('../pages/login/LoginPage'))
 const MainPage = lazy(() => import('../pages/main/MainPage'))
@@ -45,7 +46,11 @@ const appRoutes: RouteObject[] = [
       },
       {
         path: MAIN_ROUTE_SEGMENTS.instructor,
-        element: <Instructor />,
+        element: (
+          <InstructorRoute>
+            <Instructor />
+          </InstructorRoute>
+        ),
       },
       {
         path: MAIN_ROUTE_SEGMENTS.settings,

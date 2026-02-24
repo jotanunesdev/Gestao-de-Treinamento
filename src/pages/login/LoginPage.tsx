@@ -1,25 +1,23 @@
 import styles from "./login.module.css"
 import { useNavigate } from "react-router-dom"
 import { useMemo, useState } from "react"
-import { useReadView } from "../../shared/hooks/useReadView"
 import { useReadViewContext } from "../../app/readViewContext"
-import type { ReadViewResponse } from "../../shared/types/readView"
 import { ROUTES } from "../../app/paths"
 import Button from "../../shared/ui/button/Button"
 import Input from "../../shared/ui/input/Input"
 import Modal from "../../shared/ui/modal/Modal"
 import type { User } from "../../entities/types"
 import { maskCpf } from "../../shared/utils/maskCpf"
+import { ApiError } from "../../shared/api/client"
 import {
-  getPasswordForCpf,
-  setActiveCpf,
-  setPasswordForCpf,
-} from "../../shared/auth/passwordStore"
+  firstAccessUser,
+  loginUser,
+  mapUserToReadView,
+} from "../../shared/api/auth"
 import { getStoredTheme } from "../../shared/theme"
 
 const LoginPage = () => {
-  const { loading, error, readView } = useReadView<ReadViewResponse>()
-  const { setData } = useReadViewContext<ReadViewResponse>()
+  const { setData } = useReadViewContext()
   const navigate = useNavigate()
   const [user, setUser] = useState<User>({
     cpf: "",
@@ -30,13 +28,13 @@ const LoginPage = () => {
   const [formError, setFormError] = useState<string | null>(null)
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
   const [pendingPasswordCpf, setPendingPasswordCpf] = useState("")
-  const [pendingReadViewData, setPendingReadViewData] =
-    useState<ReadViewResponse | null>(null)
   const [passwordForm, setPasswordForm] = useState({
     password: "",
     confirmPassword: "",
   })
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   const logoSrc = useMemo(
     () => (getStoredTheme() === "dark" ? "/logo-branca.png" : "/logo.webp"),
@@ -48,6 +46,7 @@ const LoginPage = () => {
     const nextValue = name === "cpf" ? maskCpf(value) : value
 
     setFormError(null)
+    setApiError(null)
 
     setUser((prev) => ({
       ...prev,
@@ -58,8 +57,8 @@ const LoginPage = () => {
   const handleToggleFirstAccess = () => {
     setIsFirstAccess((prev) => !prev)
     setFormError(null)
-    setPendingReadViewData(null)
     setPendingPasswordCpf("")
+    setApiError(null)
     setUser((prev) => ({
       ...prev,
       dtNascimento: "",
@@ -76,20 +75,9 @@ const LoginPage = () => {
     }))
   }
 
-  const buildFilter = (cpfDigits: string) => {
-    if (!isFirstAccess) {
-      return `PPESSOA.CPF='${cpfDigits}' AND PFUNC.CODSITUACAO='A'`
-    }
-
-    const nascimento = user.dtNascimento
-      ? `${user.dtNascimento} 00:00:00.000`
-      : ""
-
-    return `PPESSOA.DTNASCIMENTO='${nascimento}' AND PPESSOA.CPF='${cpfDigits}' AND PFUNC.CODSITUACAO='A'`
-  }
-
   const handleSubmit = async () => {
     setFormError(null)
+    setApiError(null)
 
     try {
       const cpf = user.cpf.replace(/\D/g, "")
@@ -108,63 +96,57 @@ const LoginPage = () => {
         return
       }
 
-      const filter = buildFilter(cpf)
-
-      const result = await readView({
-        dataServerName: "FopFuncData",
-        filter,
-        context: "CODCOLIGADA=1",
-      })
-
       if (isFirstAccess) {
-        const existingPassword = getPasswordForCpf(cpf)
-        if (existingPassword) {
-          setFormError("Sua senha ja esta cadastrada. Entre com CPF e senha.")
-          setIsFirstAccess(false)
-          setPendingReadViewData(null)
-          setPendingPasswordCpf("")
-          return
-        }
-
         setPendingPasswordCpf(cpf)
-        setPendingReadViewData(result)
         setIsPasswordModalOpen(true)
         return
       }
 
-      const storedPassword = getPasswordForCpf(cpf)
-      if (!storedPassword) {
-        setFormError("Primeiro acesso detectado. Use CPF e data de nascimento.")
-        setIsFirstAccess(true)
-        setUser((prev) => ({
-          ...prev,
-          dtNascimento: "",
-          password: "",
-        }))
-        return
-      }
-
-      if (storedPassword !== user.password) {
-        setFormError("Senha invalida. Tente novamente.")
-        return
-      }
-
-      setData(result)
-      setActiveCpf(cpf)
+      setIsLoading(true)
+      const result = await loginUser({ cpf, password: user.password })
+      setData(mapUserToReadView(result.user))
       navigate(ROUTES.main)
     } catch (e) {
+      if (e instanceof ApiError) {
+        if (e.status === 409 && (e.data as { error?: string })?.error) {
+          setFormError(
+            (e.data as { message?: string })?.message ??
+              "Primeiro acesso detectado. Use CPF e data de nascimento.",
+          )
+          setIsFirstAccess(true)
+          setUser((prev) => ({
+            ...prev,
+            dtNascimento: "",
+            password: "",
+          }))
+          return
+        }
+
+        setApiError(e.message)
+        return
+      }
+
       console.error(e)
+      setApiError("Nao foi possivel realizar o login.")
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
+      if (isPasswordModalOpen) {
+        void handleSavePassword()
+        return
+      }
+
       void handleSubmit()
     }
   }
 
-  const handleSavePassword = () => {
+  const handleSavePassword = async () => {
     setPasswordError(null)
+    setApiError(null)
 
     if (!pendingPasswordCpf) {
       setPasswordError("Nao foi possivel identificar o CPF.")
@@ -186,19 +168,35 @@ const LoginPage = () => {
       return
     }
 
-    if (!pendingReadViewData) {
-      setPasswordError("Nao foi possivel concluir o acesso. Tente novamente.")
+    if (!user.dtNascimento) {
+      setPasswordError("Informe a data de nascimento antes de continuar.")
       return
     }
 
-    setPasswordForCpf(pendingPasswordCpf, passwordForm.password)
-    setData(pendingReadViewData)
-    setActiveCpf(pendingPasswordCpf)
-    setPendingReadViewData(null)
-    setIsPasswordModalOpen(false)
-    setPasswordForm({ password: "", confirmPassword: "" })
-    setUser((prev) => ({ ...prev, password: "" }))
-    navigate(ROUTES.main)
+    try {
+      setIsLoading(true)
+      const result = await firstAccessUser({
+        cpf: pendingPasswordCpf,
+        dtNascimento: user.dtNascimento,
+        password: passwordForm.password,
+      })
+
+      setData(mapUserToReadView(result.user))
+      setIsPasswordModalOpen(false)
+      setPasswordForm({ password: "", confirmPassword: "" })
+      setUser((prev) => ({ ...prev, password: "" }))
+      navigate(ROUTES.main)
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setPasswordError(e.message)
+        return
+      }
+
+      console.error(e)
+      setPasswordError("Nao foi possivel concluir o primeiro acesso.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -265,14 +263,14 @@ const LoginPage = () => {
           </div>
 
           {formError ? <p className={styles.errorText}>{formError}</p> : null}
-          {error ? <p className={styles.errorText}>{error}</p> : null}
+          {apiError ? <p className={styles.errorText}>{apiError}</p> : null}
 
           <div className={styles.button_group}>
             <Button
               size="lg"
               text="Acessar"
               onClick={handleSubmit}
-              isLoading={loading}
+              isLoading={isLoading}
               fullWidth
             />
             <Button
@@ -324,6 +322,7 @@ const LoginPage = () => {
                 size="lg"
                 text="Salvar senha"
                 onClick={handleSavePassword}
+                isLoading={isLoading}
                 fullWidth
               />
             </div>

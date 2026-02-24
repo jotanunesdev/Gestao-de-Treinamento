@@ -18,14 +18,13 @@ import { useReadViewContext } from "../../app/readViewContext"
 import { NavLink, Outlet, useNavigate } from "react-router-dom"
 import type { ReadViewResponse, PFuncItem } from "../../shared/types/readView"
 import { ROUTES } from "../../app/paths"
-import { clearActiveCpf } from "../../shared/auth/passwordStore"
+import { getUserByCpf } from "../../shared/api/users"
 import {
-  applyTheme,
   getStoredTheme,
-  setStoredTheme,
   THEME_CHANGE_EVENT,
   type Theme,
 } from "../../shared/theme"
+import { getFluigLoggedUserName, toPersonNameCase } from "../../shared/fluig/user"
 
 const MAIN_NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", to: ROUTES.mainDashboard, icon: faChartLine },
@@ -36,13 +35,17 @@ const MAIN_NAV_ITEMS = [
 ] as const
 
 const MainPage = () => {
-  const { data, clearData } = useReadViewContext<ReadViewResponse>()
+  const { data, setData, clearData } = useReadViewContext<ReadViewResponse>()
   const navigate = useNavigate()
   const [theme, setTheme] = useState<Theme>(() => getStoredTheme())
 
   const pfunc: PFuncItem | undefined = Array.isArray(data?.PFunc)
     ? data?.PFunc[0]
     : data?.PFunc
+  const fluigUserName = getFluigLoggedUserName()
+  const asideUserName = fluigUserName ?? toPersonNameCase(pfunc?.NOME ?? "")
+  const isInstrutor = Boolean(data?.User?.INSTRUTOR)
+  const cpfDigits = (data?.User?.CPF ?? pfunc?.CPF ?? "").replace(/\D/g, "")
 
   useEffect(() => {
     const handleThemeChange = (event: Event) => {
@@ -58,15 +61,41 @@ const MainPage = () => {
     }
   }, [])
 
-  const handleToggleTheme = () => {
-    const nextTheme: Theme = theme === "dark" ? "light" : "dark"
-    setTheme(nextTheme)
-    setStoredTheme(nextTheme)
-    applyTheme(nextTheme)
-  }
+  useEffect(() => {
+    if (!cpfDigits || cpfDigits.length !== 11) {
+      return
+    }
+
+    let cancelled = false
+    getUserByCpf(cpfDigits)
+      .then((response) => {
+        if (cancelled) return
+
+        const nextInstrutor = Boolean(response.user?.INSTRUTOR)
+        if (nextInstrutor === Boolean(data?.User?.INSTRUTOR)) {
+          return
+        }
+
+        const nextData: ReadViewResponse = {
+          ...(data ?? {}),
+          User: {
+            CPF: cpfDigits,
+            INSTRUTOR: nextInstrutor,
+            PERMISSAO: response.user?.PERMISSAO ?? data?.User?.PERMISSAO ?? null,
+          },
+          PFunc: data?.PFunc,
+        }
+
+        setData(nextData)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [cpfDigits, data, setData])
 
   const handleLogout = () => {
-    clearActiveCpf()
     clearData()
     navigate(ROUTES.login, { replace: true })
   }
@@ -82,11 +111,11 @@ const MainPage = () => {
         userCompany={pfunc?.NOMEFILIAL}
         userFunction={pfunc?.NOME_FUNCAO}
         userSection={pfunc?.NOME_SECAO}
-        userName={pfunc?.NOME}
+        userName={asideUserName}
       >
         <div className={styles.asideContent}>
           <nav className={styles.asideNav}>
-            {MAIN_NAV_ITEMS.map((item) => (
+            {MAIN_NAV_ITEMS.filter((item) => isInstrutor || item.id !== "instructor").map((item) => (
               <NavLink
                 key={item.id}
                 to={item.to}
@@ -102,20 +131,6 @@ const MainPage = () => {
             ))}
           </nav>
           <div className={styles.asideFooter}>
-            <div className={styles.themeToggle}>
-              <span className={styles.themeLabel}>Modo escuro</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={theme === "dark"}
-                aria-label="Alternar modo escuro"
-                className={styles.themeSwitch}
-                data-checked={theme === "dark"}
-                onClick={handleToggleTheme}
-              >
-                <span className={styles.themeThumb} aria-hidden="true" />
-              </button>
-            </div>
             <Button text="Sair" variant="ghost" fullWidth onClick={handleLogout} />
           </div>
         </div>

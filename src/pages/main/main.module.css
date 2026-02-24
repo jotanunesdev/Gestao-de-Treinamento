@@ -45,6 +45,43 @@
     gap: 0.5rem;
 }
 
+.trainingEmployeeFilterRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.6rem;
+    align-items: end;
+}
+
+.trainingEmployeeFilterField {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    color: var(--surface-text);
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.trainingEmployeeFilterSelect {
+    width: 100%;
+    min-height: 40px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-bg);
+    color: var(--surface-text);
+    padding: 0.45rem 0.55rem;
+}
+
+.trainingEmployeeFilterButton {
+    display: flex;
+    align-items: flex-end;
+}
+
+.trainingEmployeeFilterHint {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--surface-muted-text);
+}
+
 .trainingTableHeader {
     display: flex;
     align-items: center;
@@ -302,9 +339,35 @@
     background: var(--surface-muted-bg);
 }
 
+.trainingQueueButton {
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+}
+
+.trainingQueueButton:disabled {
+    cursor: default;
+    opacity: 0.75;
+}
+
 .trainingQueueActive {
     border-color: var(--primary-color);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+.trainingQueueDragging {
+    opacity: 0.5;
+}
+
+.trainingQueueDropTarget {
+    border-color: var(--primary-color);
+    background: rgba(59, 130, 246, 0.08);
 }
 
 .trainingQueueInfo {
@@ -329,6 +392,11 @@
 .trainingQueueTypeVideo {
     background: rgba(59, 130, 246, 0.14);
     color: var(--primary-color);
+}
+
+.trainingQueueTypeDone {
+    background: rgba(22, 163, 74, 0.14);
+    color: var(--succes-color);
 }
 
 .trainingQueueTypePdf {
@@ -356,6 +424,325 @@
     color: var(--surface-muted-text);
     font-weight: 600;
     padding: 1rem;
+}
+
+.trainingQueueObjectiveStatus {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px dashed var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-muted-bg);
+}
+
+.trainingPdfListSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.trainingPdfListTitle {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--surface-muted-text);
+    font-weight: 700;
+}
+
+.trainingPdfList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.trainingPdfButton {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    background: var(--surface-muted-bg);
+    border-radius: 10px;
+    padding: 0.5rem 0.55rem;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--surface-text);
+    cursor: pointer;
+    text-align: left;
+}
+
+.trainingPdfButtonActive {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color) 55%, transparent);
+}
+
+.trainingPdfName {
+    font-size: 0.85rem;
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.trainingProvaArea {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.trainingProvaQuestion {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--surface-bg);
+    padding: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.trainingProvaQuestionHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--surface-muted-text);
+    font-size: 0.82rem;
+}
+
+.trainingProvaQuestionText {
+    margin: 0;
+    color: var(--surface-text);
+    font-weight: 600;
+}
+
+.trainingProvaOptions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.trainingProvaOption {
+    display: flex;
+    gap: 0.55rem;
+    align-items: flex-start;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.5rem 0.6rem;
+    background: var(--surface-muted-bg);
+}
+
+.trainingProvaOptionCorrect {
+    border-color: var(--succes-color);
+    background: rgba(22, 163, 74, 0.12);
+}
+
+.trainingProvaOptionWrong {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.14);
+}
+
+.trainingProvaResult {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-bg);
+    padding: 0.65rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    color: var(--surface-text);
+}
+
+.trainingProvaError {
+    margin: 0;
+    color: var(--error-color);
+    font-weight: 600;
+}
+
+.trainingProvaActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.trainingEficacyModal {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.trainingEvidenceModal {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.trainingEvidenceDurationRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 220px));
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.trainingEvidenceField {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    color: var(--surface-text);
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.trainingEvidenceUploadBox {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.75rem;
+    background: var(--surface-muted-bg);
+}
+
+.trainingEvidenceUploadLabel {
+    color: var(--surface-text);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.trainingEvidenceFileInput {
+    color: var(--surface-text);
+}
+
+.trainingEvidenceFileList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 180px;
+    overflow: auto;
+}
+
+.trainingEvidenceFileList li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface-bg);
+    padding: 0.45rem 0.55rem;
+    color: var(--surface-text);
+    font-size: 0.85rem;
+}
+
+.trainingEvidenceFileList li span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trainingEvidenceRemoveBtn {
+    border: 1px solid var(--border-color);
+    background: var(--surface-muted-bg);
+    color: var(--surface-text);
+    border-radius: 8px;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.trainingEvidenceRemoveBtn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.trainingEficacyQuestion {
+    margin: 0;
+    font-weight: 600;
+    color: var(--surface-text);
+    line-height: 1.45;
+}
+
+.trainingEficacyHint {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--surface-muted-text);
+}
+
+.trainingEficacyOptions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.trainingEficacyOption {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-muted-bg);
+    padding: 0.55rem 0.65rem;
+    color: var(--surface-text);
+}
+
+.trainingEfficacyCollectiveList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 0.2rem;
+}
+
+.trainingEfficacyCollectiveRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr);
+    gap: 0.6rem;
+    align-items: center;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.6rem;
+    background: var(--surface-muted-bg);
+}
+
+.trainingEfficacyParticipantInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.trainingEfficacyParticipantInfo strong {
+    color: var(--surface-text);
+    font-size: 0.92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trainingEfficacyParticipantInfo span {
+    color: var(--surface-muted-text);
+    font-size: 0.8rem;
+}
+
+.trainingEfficacySelect {
+    width: 100%;
+    min-height: 38px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-bg);
+    color: var(--surface-text);
+    padding: 0.45rem 0.55rem;
+}
+
+.trainingEfficacyProgress {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--surface-muted-text);
+    font-weight: 600;
 }
 
 .navTitle {
@@ -432,6 +819,81 @@
     margin-top: 1.25rem;
 }
 
+.userInfoSection {
+    margin-top: 0;
+}
+
+.userInfoHero {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    padding: 1.25rem;
+    background: linear-gradient(135deg, rgba(208, 49, 45, 0.12), rgba(208, 49, 45, 0.04));
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    box-shadow: 0 18px 35px rgba(0, 0, 0, 0.08);
+}
+
+.userInfoHero::after {
+    content: "";
+    position: absolute;
+    inset: auto -80px -120px auto;
+    width: 240px;
+    height: 240px;
+    background: radial-gradient(circle, rgba(208, 49, 45, 0.28), transparent 70%);
+    pointer-events: none;
+}
+
+.userInfoHeroHeader {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.userInfoEyebrow {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 800;
+    color: var(--surface-muted-text);
+    margin: 0;
+}
+
+.userInfoName {
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    font-weight: 800;
+    color: var(--surface-text);
+    margin: 0;
+}
+
+.userInfoFilial {
+    font-size: 0.98rem;
+    font-weight: 600;
+    color: var(--surface-text);
+    opacity: 0.9;
+    margin: 0.1rem 0 0.4rem;
+}
+
+.userInfoBadges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.userInfoBadge {
+    border: 1px solid var(--border-color);
+    background: var(--surface-muted-bg);
+    border-color: color-mix(in srgb, var(--border-color) 75%, transparent);
+    background: color-mix(in srgb, var(--surface-bg) 80%, var(--primary-color) 20%);
+    color: var(--surface-text);
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 0.78rem;
+}
+
 .settingsSectionHeader {
     display: flex;
     flex-direction: column;
@@ -504,6 +966,26 @@
     margin: 0.15rem 0 0;
 }
 
+.settingsActionRow {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.settingsModalActions {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    margin-top: 0.25rem;
+}
+
+.settingsModalActions button {
+    min-width: 160px;
+    flex: 1 1 160px;
+}
+
 .infoGrid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -512,13 +994,22 @@
 
 .infoItem {
     border: 1px solid var(--border-color);
-    background: var(--surface-muted-bg);
-    border-radius: 14px;
-    padding: 0.8rem 0.9rem;
+    background: var(--surface-bg);
+    border-radius: 16px;
+    padding: 0.9rem 1rem;
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-    min-height: 86px;
+    min-height: 92px;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.06);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.infoItem:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary-color);
+    border-color: color-mix(in srgb, var(--primary-color) 45%, var(--border-color));
+    box-shadow: 0 18px 32px rgba(0, 0, 0, 0.1);
 }
 
 .infoLabel {
@@ -606,7 +1097,10 @@
     width: 570px;
     margin: 1rem 0;
     flex: 1;
-    transition: 0.3s ease;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
 .material {
@@ -650,8 +1144,153 @@
 }
 
 .video_content:hover {
-    background-color: var(--primary-color);
-    box-shadow: var(--box-shadow);
+    border-color: color-mix(in srgb, var(--primary-color) 35%, var(--border-color));
+    box-shadow: var(--surface-shadow);
+}
+
+.dashboardStatusBadge {
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.16);
+    color: var(--primary-color);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.dashboardMedia {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: var(--media-bg);
+    width: 100%;
+    aspect-ratio: 16 / 9;
+}
+
+.dashboardThumbImage,
+.dashboardThumbVideo {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    background: #000;
+}
+
+.dashboardThumbPlaceholder {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: var(--surface-muted-text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px dashed var(--border-color);
+    background: var(--surface-muted-bg);
+}
+
+.dashboardMediaMeta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.dashboardMediaMeta h3 {
+    margin: 0;
+    font-size: 1.02rem;
+    color: var(--surface-text);
+}
+
+.dashboardMediaMeta p {
+    margin: 0;
+    color: var(--surface-muted-text);
+    font-size: 0.9rem;
+}
+
+.dashboardActionList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin: 0.9rem 0 1rem;
+}
+
+.dashboardObservations {
+    margin: 0 0 1rem;
+    padding: 0.85rem;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-muted-bg);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.dashboardObservations h3 {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--surface-text);
+}
+
+.dashboardObservationItem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.84rem;
+    color: var(--surface-text);
+}
+
+.dashboardObservationItem strong {
+    color: var(--surface-text);
+}
+
+.dashboardObservationItem span {
+    color: var(--surface-muted-text);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.dashboardActionItem {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.88rem;
+    color: var(--surface-text);
+}
+
+.dashboardCongrats {
+    margin-top: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--primary-color) 14%, var(--surface-bg)) 0%,
+        var(--surface-bg) 50%,
+        color-mix(in srgb, var(--secondary-color) 14%, var(--surface-bg)) 100%
+    );
+    padding: 1.4rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.55rem;
+}
+
+.dashboardCongrats h3 {
+    margin: 0;
+    color: var(--surface-text);
+}
+
+.dashboardCongrats p {
+    margin: 0;
+    color: var(--surface-muted-text);
+}
+
+.dashboardCongratsIcon {
+    font-size: 1.3rem;
+    color: var(--primary-color);
 }
 
 .themeToggle {
@@ -713,17 +1352,105 @@
     padding: .8rem;
 }
 
+.trainingCardsGrid {
+    margin-top: 1rem;
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.trainingTrilhaCard {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--surface-muted-bg);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.trainingTrilhaCard button {
+    align-self: flex-start;
+}
+
 .training_content h4 {
     margin: 1rem 0;
     color: var(--black-color);
+}
+
+.trainingBlock {
+    margin-bottom: 1rem;
+}
+
+.trainingBlockTitle {
+    margin: 0.5rem 0 0.75rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--surface-text);
+}
+
+.trainingMeta {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--surface-muted-text);
+}
+
+.trainingEmpty {
+    margin-top: 0.5rem;
+    color: var(--surface-muted-text);
+    font-weight: 600;
 }
 
 .grid_video_area {
     display: flex;
     flex: 1;
     gap: 20px;
+    flex-wrap: wrap;
 }
 
+.trainingVideoCard {
+    width: min(360px, 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--media-bg);
+    padding: 0.5rem;
+}
+
+.trainingVideo {
+    width: 100%;
+    border-radius: 10px;
+    background: #000;
+}
+
+.trainingVideoPlaceholder {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--border-color);
+    color: var(--surface-muted-text);
+    font-weight: 600;
+    background: var(--surface-muted-bg);
+}
+
+.trainingVideoMeta {
+    margin-top: 0.45rem;
+    display: flex;
+    align-items: center;
+}
+
+.trainingVideoDone {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--succes-color);
+}
+
+.trainingVideoPending {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--surface-muted-text);
+}
 
 
 @media (max-width: 900px) {
@@ -736,6 +1463,14 @@
 }
 
 @media (max-width: 1024px) {
+    .video_section {
+        flex-direction: column;
+    }
+
+    .video_content {
+        width: 100%;
+    }
+
     .trainingModalBody {
         grid-template-columns: 1fr;
     }
@@ -746,5 +1481,18 @@
 
     .trainingPdfFrame {
         min-height: 420px;
+    }
+
+    .trainingEmployeeFilterRow {
+        grid-template-columns: 1fr;
+    }
+
+    .trainingEvidenceDurationRow {
+        grid-template-columns: 1fr;
+    }
+
+    .trainingEvidenceFileList li {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }

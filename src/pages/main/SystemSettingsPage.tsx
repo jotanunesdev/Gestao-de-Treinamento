@@ -5,11 +5,7 @@ import { useReadViewContext } from "../../app/readViewContext"
 import type { PFuncItem, ReadViewResponse } from "../../shared/types/readView"
 import Input from "../../shared/ui/input/Input"
 import Button from "../../shared/ui/button/Button"
-import {
-  getActiveCpf,
-  getPasswordForCpf,
-  setPasswordForCpf,
-} from "../../shared/auth/passwordStore"
+import Modal from "../../shared/ui/modal/Modal"
 import { maskCpfRestricted } from "../../shared/utils/maskCpf"
 import {
   applyTheme,
@@ -18,6 +14,8 @@ import {
   THEME_CHANGE_EVENT,
   type Theme,
 } from "../../shared/theme"
+import { ApiError } from "../../shared/api/client"
+import { updateUserPassword } from "../../shared/api/auth"
 
 function normalizeDate(value?: string) {
   if (!value) {
@@ -103,6 +101,7 @@ const SystemSettingsPage = () => {
     : data?.PFunc
 
   const [theme, setTheme] = useState<Theme>(() => getStoredTheme())
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -110,10 +109,12 @@ const SystemSettingsPage = () => {
   })
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
+  const [isSavingPassword, setIsSavingPassword] = useState(false)
 
-  const activeCpf = getActiveCpf()
-  const cpfDigits = (pfunc?.CPF ?? activeCpf).replace(/\D/g, "")
+  const cpfDigits = (pfunc?.CPF ?? "").replace(/\D/g, "")
   const maskedCpf = cpfDigits ? maskCpfRestricted(cpfDigits) : "-"
+  const userName = pfunc?.NOME ?? "Usuario"
+  const filialName = pfunc?.NOMEFILIAL ?? "Filial nao informada"
 
   const age = useMemo(() => {
     if (pfunc?.IDADE) {
@@ -183,53 +184,77 @@ const SystemSettingsPage = () => {
     }))
   }
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     setPasswordError(null)
-    setPasswordSuccess(null)
 
     if (!cpfDigits) {
       setPasswordError("Nao foi possivel identificar o CPF do usuario logado.")
-      return
-    }
-
-    const storedPassword = getPasswordForCpf(cpfDigits)
-    if (!storedPassword) {
-      setPasswordError("Nenhuma senha cadastrada. Use o fluxo de primeiro acesso.")
-      return
-    }
-
-    if (!passwordForm.currentPassword) {
-      setPasswordError("Informe sua senha atual.")
-      return
-    }
-
-    if (storedPassword !== passwordForm.currentPassword) {
-      setPasswordError("Senha atual invalida.")
-      return
+      return false
     }
 
     if (!passwordForm.newPassword || !passwordForm.confirmNewPassword) {
       setPasswordError("Informe e confirme a nova senha.")
-      return
+      return false
     }
 
     if (passwordForm.newPassword.length < 6) {
       setPasswordError("A nova senha deve ter ao menos 6 caracteres.")
-      return
+      return false
     }
 
     if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
       setPasswordError("A confirmacao da nova senha nao confere.")
-      return
+      return false
     }
 
-    setPasswordForCpf(cpfDigits, passwordForm.newPassword)
+    if (!passwordForm.currentPassword) {
+      setPasswordError("Informe sua senha atual.")
+      return false
+    }
+
+    try {
+      setIsSavingPassword(true)
+      await updateUserPassword({
+        cpf: cpfDigits,
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      })
+
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmNewPassword: "",
+      })
+      setPasswordSuccess("Senha alterada com sucesso.")
+      setIsPasswordModalOpen(false)
+      return true
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setPasswordError(error.message)
+        return false
+      }
+
+      console.error(error)
+      setPasswordError("Nao foi possivel alterar a senha.")
+      return false
+    } finally {
+      setIsSavingPassword(false)
+    }
+  }
+
+  const handleOpenPasswordModal = () => {
+    setPasswordError(null)
+    setPasswordSuccess(null)
     setPasswordForm({
       currentPassword: "",
       newPassword: "",
       confirmNewPassword: "",
     })
-    setPasswordSuccess("Senha alterada com sucesso.")
+    setIsPasswordModalOpen(true)
+  }
+
+  const handleClosePasswordModal = () => {
+    setIsPasswordModalOpen(false)
   }
 
   const handlePreventCopy = (event: React.ClipboardEvent<HTMLElement>) => {
@@ -253,6 +278,45 @@ const SystemSettingsPage = () => {
 
       <section className={styles.content}>
         <div className={styles.contentCard}>
+          <section className={`${styles.settingsSection} ${styles.userInfoSection}`}>
+            <div className={styles.userInfoHero}>
+              <div className={styles.userInfoHeroHeader}>
+                <p className={styles.userInfoEyebrow}>Seus dados</p>
+                <h2 className={styles.userInfoName}>{userName}</h2>
+                <p className={styles.userInfoFilial}>{filialName}</p>
+                <div className={styles.userInfoBadges}>
+                  <span className={styles.userInfoBadge}>IDADE: {age}</span>
+                  <span className={styles.userInfoBadge}>SEXO: {genderLabel}</span>
+                  <span className={styles.userInfoBadge}>
+                    DTNASCIMENTO: {formattedBirthDate}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.infoGrid}>
+                {userInfoItems.map((item) => (
+                  <article key={item.id} className={styles.infoItem}>
+                    <span className={styles.infoLabel}>{item.label}</span>
+                    <span
+                      className={
+                        item.sensitive
+                          ? `${styles.infoValue} ${styles.sensitiveValue}`
+                          : styles.infoValue
+                      }
+                      onCopy={item.sensitive ? handlePreventCopy : undefined}
+                      onCut={item.sensitive ? handlePreventCopy : undefined}
+                      onContextMenu={
+                        item.sensitive ? handlePreventContextMenu : undefined
+                      }
+                    >
+                      {item.value}
+                    </span>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+
           <section className={styles.settingsSection}>
             <div className={styles.settingsSectionHeader}>
               <h2 className={styles.settingsSectionTitle}>Tema</h2>
@@ -288,80 +352,76 @@ const SystemSettingsPage = () => {
 
           <section className={styles.settingsSection}>
             <div className={styles.settingsSectionHeader}>
-              <h2 className={styles.settingsSectionTitle}>Alterar Senha</h2>
+              <h2 className={styles.settingsSectionTitle}>Seguranca</h2>
               <p className={styles.settingsSectionSubtitle}>
-                Confirme sua senha atual para definir uma nova.
+                Altere sua senha com seguranca em um modal dedicado.
               </p>
             </div>
-            <div className={styles.settingsForm}>
-              <Input
-                label="Senha atual"
-                type="password"
-                name="currentPassword"
-                value={passwordForm.currentPassword}
-                onChange={handlePasswordInputChange}
-                placeholder="Digite sua senha atual"
+            <div className={styles.settingsActionRow}>
+              <Button
+                size="lg"
+                text="Trocar senha"
+                onClick={handleOpenPasswordModal}
               />
-              <Input
-                label="Nova senha"
-                type="password"
-                name="newPassword"
-                value={passwordForm.newPassword}
-                onChange={handlePasswordInputChange}
-                placeholder="Minimo de 6 caracteres"
-              />
-              <Input
-                label="Confirmar nova senha"
-                type="password"
-                name="confirmNewPassword"
-                value={passwordForm.confirmNewPassword}
-                onChange={handlePasswordInputChange}
-                placeholder="Repita a nova senha"
-              />
-              <p className={styles.settingsInlineHint}>
-                Por seguranca, use pelo menos 6 caracteres.
-              </p>
-              {passwordError ? (
-                <p className={styles.settingsFeedbackError}>{passwordError}</p>
-              ) : null}
-              {passwordSuccess ? (
-                <p className={styles.settingsFeedbackSuccess}>{passwordSuccess}</p>
-              ) : null}
-              <Button size="lg" text="Salvar nova senha" onClick={handleChangePassword} />
             </div>
-          </section>
-
-          <section className={styles.settingsSection}>
-            <div className={styles.settingsSectionHeader}>
-              <h2 className={styles.settingsSectionTitle}>Seus Dados</h2>
-              <p className={styles.settingsSectionSubtitle}>
-                Informacoes exibidas apenas para consulta.
-              </p>
-            </div>
-            <div className={styles.infoGrid}>
-              {userInfoItems.map((item) => (
-                <article key={item.id} className={styles.infoItem}>
-                  <span className={styles.infoLabel}>{item.label}</span>
-                  <span
-                    className={
-                      item.sensitive
-                        ? `${styles.infoValue} ${styles.sensitiveValue}`
-                        : styles.infoValue
-                    }
-                    onCopy={item.sensitive ? handlePreventCopy : undefined}
-                    onCut={item.sensitive ? handlePreventCopy : undefined}
-                    onContextMenu={
-                      item.sensitive ? handlePreventContextMenu : undefined
-                    }
-                  >
-                    {item.value}
-                  </span>
-                </article>
-              ))}
-            </div>
+            {passwordSuccess ? (
+              <p className={styles.settingsFeedbackSuccess}>{passwordSuccess}</p>
+            ) : null}
           </section>
         </div>
       </section>
+
+      <Modal
+        open={isPasswordModalOpen}
+        onClose={handleClosePasswordModal}
+        title="Trocar senha"
+        size="md"
+      >
+        <div className={styles.settingsForm}>
+          <Input
+            label="Senha atual"
+            type="password"
+            name="currentPassword"
+            value={passwordForm.currentPassword}
+            onChange={handlePasswordInputChange}
+            placeholder="Digite sua senha atual"
+          />
+          <Input
+            label="Nova senha"
+            type="password"
+            name="newPassword"
+            value={passwordForm.newPassword}
+            onChange={handlePasswordInputChange}
+            placeholder="Minimo de 6 caracteres"
+          />
+          <Input
+            label="Confirmar nova senha"
+            type="password"
+            name="confirmNewPassword"
+            value={passwordForm.confirmNewPassword}
+            onChange={handlePasswordInputChange}
+            placeholder="Repita a nova senha"
+          />
+          <p className={styles.settingsInlineHint}>
+            Por seguranca, use pelo menos 6 caracteres.
+          </p>
+          {passwordError ? (
+            <p className={styles.settingsFeedbackError}>{passwordError}</p>
+          ) : null}
+          <div className={styles.settingsModalActions}>
+            <Button
+              variant="secondary"
+              text="Cancelar"
+              onClick={handleClosePasswordModal}
+            />
+            <Button
+              text="Salvar nova senha"
+              onClick={handleChangePassword}
+              isLoading={isSavingPassword}
+            />
+          </div>
+        </div>
+      </Modal>
     </>
   )
 }

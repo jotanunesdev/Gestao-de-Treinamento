@@ -13,7 +13,7 @@ export type TableColumn<T> = {
   headerClassName?: string
 }
 
-type TableProps<T extends Record<string, ReactNode>> = {
+type TableProps<T extends Record<string, unknown>> = {
   columns: TableColumn<T>[]
   data: T[]
   caption?: string
@@ -39,7 +39,7 @@ const alignClasses = {
   right: styles.alignRight,
 }
 
-function Table<T extends Record<string, ReactNode>>({
+function Table<T extends Record<string, unknown>>({
   columns,
   data,
   caption,
@@ -86,7 +86,7 @@ function Table<T extends Record<string, ReactNode>>({
       return data.map((row, index) => ({ row, index }))
     }
 
-    const normalize = (value: ReactNode) => {
+    const normalize = (value: unknown): string => {
       if (value === null || value === undefined) return ""
       if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
         return String(value)
@@ -248,7 +248,7 @@ function Table<T extends Record<string, ReactNode>>({
                       const alignClass = alignClasses[column.align ?? "left"]
                       const value = column.render
                         ? column.render(row, index)
-                        : row[column.key as keyof T]
+                        : (row[column.key as keyof T] as ReactNode)
                       return (
                         <td
                           key={`${rowKey}-${String(column.key)}-${colIndex}`}

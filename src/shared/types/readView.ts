@@ -12,4 +12,9 @@ export type PFuncItem = {
 
 export type ReadViewResponse = {
   PFunc?: PFuncItem[] | PFuncItem
+  User?: {
+    CPF: string
+    INSTRUTOR?: boolean
+    PERMISSAO?: string | null
+  }
 }
