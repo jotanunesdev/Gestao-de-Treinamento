@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { Navigate, type RouteObject, useRoutes } from 'react-router-dom'
+import { Navigate, type RouteObject, useLocation, useRoutes } from 'react-router-dom'
 import { MAIN_ROUTE_SEGMENTS, ROUTES } from './paths'
 import ProtectedRoute from './ProtectedRoute'
 import InstructorRoute from './InstructorRoute'
@@ -11,6 +11,22 @@ const TrainingsPage = lazy(() => import('../pages/main/TrainingsPage'))
 const CompletedCoursesPage = lazy(() => import('../pages/main/CompletedCoursesPage'))
 const Instructor = lazy(() => import('../pages/main/Instructor'))
 const SystemSettingsPage = lazy(() => import('../pages/main/SystemSettingsPage'))
+
+function RedirectToLoginPreservingQuery() {
+  const location = useLocation()
+
+  return (
+    <Navigate
+      to={{
+        pathname: ROUTES.login,
+        search: location.search,
+        hash: location.hash,
+      }}
+      replace
+      state={{ from: location }}
+    />
+  )
+}
 
 const publicRoutes: RouteObject[] = [
   {
@@ -65,7 +81,7 @@ const routes: RouteObject[] = [
   ...appRoutes,
   {
     path: '*',
-    element: <Navigate to={ROUTES.login} replace />,
+    element: <RedirectToLoginPreservingQuery />,
   },
 ]
 

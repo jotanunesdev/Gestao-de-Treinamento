@@ -12,7 +12,17 @@ const InstructorRoute = ({ children }: InstructorRouteProps) => {
   const location = useLocation()
 
   if (!data) {
-    return <Navigate to={ROUTES.login} replace state={{ from: location }} />
+    return (
+      <Navigate
+        to={{
+          pathname: ROUTES.login,
+          search: location.search,
+          hash: location.hash,
+        }}
+        replace
+        state={{ from: location }}
+      />
+    )
   }
 
   if (!data.User?.INSTRUTOR) {
