@@ -52,6 +52,8 @@ import {
 } from "../../shared/utils/collectiveProofToken"
 
 const assetsBase = (import.meta.env.VITE_PUBLIC_ASSETS_URL ?? "").replace(/\/$/, "")
+const apiBase = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "")
+const fallbackAssetsBase = assetsBase || apiBase
 
 const decodePathSegment = (value: string) => {
   let current = value
@@ -84,6 +86,9 @@ const resolveAssetUrl = (path: string) => {
   if (/^https?:\/\//i.test(trimmed)) {
     try {
       const parsed = new URL(trimmed)
+      if (typeof window !== "undefined" && window.location.protocol === "https:" && parsed.protocol === "http:") {
+        parsed.protocol = "https:"
+      }
       parsed.pathname = normalizePathname(parsed.pathname)
       return parsed.toString()
     } catch {
@@ -94,7 +99,9 @@ const resolveAssetUrl = (path: string) => {
   const cleanPath = trimmed.replace(/^\/+/, "")
   const [pathname, suffix = ""] = cleanPath.split(/(?=[?#])/, 2)
   const normalizedPath = normalizePathname(pathname)
-  const base = assetsBase ? `${assetsBase}/${normalizedPath}` : `/${normalizedPath}`
+  const base = fallbackAssetsBase
+    ? `${fallbackAssetsBase}/${normalizedPath}`
+    : `/${normalizedPath}`
   return `${base}${suffix}`
 }
 
