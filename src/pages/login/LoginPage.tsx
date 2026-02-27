@@ -283,12 +283,6 @@ const LoginPage = () => {
               isLoading={isLoading}
               fullWidth
             />
-            <Button
-              size="lg"
-              variant="secondary"
-              text="Solicitar Acesso"
-              fullWidth
-            />
           </div>
         </div>
 
