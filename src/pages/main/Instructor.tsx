@@ -22,7 +22,9 @@ import {
 import { listCompanyEmployeeObras, listCompanyEmployees } from "../../shared/api/users"
 import {
   fetchObjectiveProvaForPlayer,
+  generateCollectiveIndividualProofQr,
   submitObjectiveProvaForCollective,
+  type CollectiveIndividualProofQrResponse,
   type CollectiveObjectiveProvaSubmissionResult,
   type ObjectiveProvaPlayerRecord,
 } from "../../shared/api/provas"
@@ -70,6 +72,11 @@ type CollectiveProvaStep = {
   trilhaTitulo: string
   prova: ObjectiveProvaPlayerRecord
 }
+
+type CollectiveIndividualQrState = Pick<
+  CollectiveIndividualProofQrResponse,
+  "token" | "redirectUrl" | "qrCodeImageUrl" | "expiresAt" | "totalUsuarios"
+>
 
 type TrilhaWithModule = TrilhaItem & {
   MODULO_NOME: string
@@ -349,6 +356,7 @@ const Instructor = () => {
   const [isTrainingStarted, setIsTrainingStarted] = useState(false)
   const [isProvaPhase, setIsProvaPhase] = useState(false)
   const [collectiveProvas, setCollectiveProvas] = useState<CollectiveProvaStep[]>([])
+  const [individualProvas, setIndividualProvas] = useState<CollectiveProvaStep[]>([])
   const [currentProvaIndex, setCurrentProvaIndex] = useState(0)
   const [collectiveAnswers, setCollectiveAnswers] = useState<
     Record<string, Record<string, string>>
@@ -380,6 +388,10 @@ const Instructor = () => {
   const [collectiveEvidenceFiles, setCollectiveEvidenceFiles] = useState<File[]>([])
   const [isSubmittingCollectiveEvidence, setIsSubmittingCollectiveEvidence] = useState(false)
   const [collectiveEvidenceError, setCollectiveEvidenceError] = useState<string | null>(null)
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false)
+  const [isGeneratingQr, setIsGeneratingQr] = useState(false)
+  const [collectiveQrError, setCollectiveQrError] = useState<string | null>(null)
+  const [collectiveQrState, setCollectiveQrState] = useState<CollectiveIndividualQrState | null>(null)
   const [isEfficacyModalOpen, setIsEfficacyModalOpen] = useState(false)
   const [collectiveEfficacyLevels, setCollectiveEfficacyLevels] = useState<Record<string, number>>({})
   const [isSubmittingEfficacy, setIsSubmittingEfficacy] = useState(false)
@@ -388,6 +400,7 @@ const Instructor = () => {
     null,
   )
   const evidenceInputRef = useRef<HTMLInputElement | null>(null)
+  const instructorMediaRef = useRef<HTMLDivElement | null>(null)
 
   const participantsColumns = useMemo<TableColumn<EmployeeRow>[]>(
     () => [
@@ -458,6 +471,7 @@ const Instructor = () => {
       Boolean(currentProvaAnswers[question.ID]),
     ).length
   }, [currentProvaAnswers, currentProvaStep])
+  const hasIndividualProvas = individualProvas.length > 0
 
   const canOpenOrderModal =
     selectedParticipantIds.length > 0 && selectedMaterialIds.length > 0
@@ -626,6 +640,7 @@ const Instructor = () => {
       setIsTrainingStarted(false)
       setIsProvaPhase(false)
       setCollectiveProvas([])
+      setIndividualProvas([])
       setCurrentProvaIndex(0)
       setCollectiveAnswers({})
       setCollectiveResults({})
@@ -633,11 +648,15 @@ const Instructor = () => {
       setHasRecordedVideoCompletion(false)
       setIsFaceModalOpen(false)
       setIsCollectiveEvidenceModalOpen(false)
+      setIsQrModalOpen(false)
       setIsEfficacyModalOpen(false)
       setCollectiveDurationHours(0)
       setCollectiveDurationMinutes(15)
       setCollectiveEvidenceFiles([])
       setCollectiveEvidenceError(null)
+      setCollectiveQrState(null)
+      setCollectiveQrError(null)
+      setIsGeneratingQr(false)
       setCollectiveEfficacyLevels({})
       setCollectiveEfficacyError(null)
       setPendingCollectiveFinalMessage(null)
@@ -745,8 +764,58 @@ const Instructor = () => {
     }
   }, [])
 
+  const openCollectiveIndividualQrModal = useCallback(
+    async (finalMessage?: string | null) => {
+      if (!activeTurmaId) {
+        setErrorMessage("Turma nao identificada para gerar o QR Code da prova individual.")
+        return
+      }
+      if (!individualProvas.length) {
+        if (finalMessage) {
+          setFeedbackMessage(finalMessage)
+        }
+        return
+      }
+
+      try {
+        setIsGeneratingQr(true)
+        setCollectiveQrError(null)
+        const response = await generateCollectiveIndividualProofQr({
+          users: selectedParticipants.map((employee) => employee.raw),
+          trilhaIds: individualProvas.map((item) => item.trilhaId),
+          turmaId: activeTurmaId,
+        })
+
+        setCollectiveQrState({
+          token: response.token,
+          redirectUrl: response.redirectUrl,
+          qrCodeImageUrl: response.qrCodeImageUrl,
+          expiresAt: response.expiresAt,
+          totalUsuarios: response.totalUsuarios,
+        })
+        setIsQrModalOpen(true)
+        if (finalMessage) {
+          setFeedbackMessage(`${finalMessage} QR Code da prova individual gerado.`)
+        } else {
+          setFeedbackMessage("QR Code da prova individual gerado para os participantes.")
+        }
+      } catch (error) {
+        console.error("Erro ao gerar QR Code da prova individual:", error)
+        setCollectiveQrError(
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel gerar o QR Code da prova individual.",
+        )
+      } finally {
+        setIsGeneratingQr(false)
+      }
+    },
+    [activeTurmaId, individualProvas, selectedParticipants],
+  )
+
   const loadCollectiveProvas = useCallback(async () => {
-    const steps: CollectiveProvaStep[] = []
+    const collectiveSteps: CollectiveProvaStep[] = []
+    const individualSteps: CollectiveProvaStep[] = []
     const trilhasSemProva: string[] = []
 
     for (const trilha of collectiveTrilhas) {
@@ -758,11 +827,16 @@ const Instructor = () => {
         continue
       }
 
-      steps.push({
+      const nextStep = {
         trilhaId: trilha.trilhaId,
         trilhaTitulo: trilha.trilhaTitulo,
         prova,
-      })
+      }
+      if (prova.MODO_APLICACAO === "individual") {
+        individualSteps.push(nextStep)
+      } else {
+        collectiveSteps.push(nextStep)
+      }
     }
 
     if (trilhasSemProva.length > 0) {
@@ -771,7 +845,10 @@ const Instructor = () => {
       )
     }
 
-    return steps
+    return {
+      collectiveSteps,
+      individualSteps,
+    }
   }, [collectiveTrilhas])
 
   const finalizeCollectiveVideoAttendance = useCallback(async () => {
@@ -869,6 +946,12 @@ const Instructor = () => {
         )
       } else {
         setIsProvaPhase(false)
+        if (hasIndividualProvas) {
+          openCollectiveEvidenceModal(
+            "Provas coletivas concluidas. Registre as evidencias para gerar o QR Code das provas individuais.",
+          )
+          return
+        }
         if (requiresFacialValidation && faceParticipants.length > 0) {
           setIsModalOpen(false)
           setIsFaceModalOpen(true)
@@ -899,6 +982,7 @@ const Instructor = () => {
     currentProvaIndex,
     currentProvaStep,
     faceParticipants.length,
+    hasIndividualProvas,
     isSubmittingProva,
     openCollectiveEvidenceModal,
     requiresFacialValidation,
@@ -932,6 +1016,13 @@ const Instructor = () => {
       return
     }
 
+    if (hasIndividualProvas) {
+      openCollectiveEvidenceModal(
+        "Videos concluidos. Registre as evidencias para gerar o QR Code das provas individuais.",
+      )
+      return
+    }
+
     if (requiresFacialValidation && faceParticipants.length > 0) {
       setIsModalOpen(false)
       setIsFaceModalOpen(true)
@@ -947,6 +1038,7 @@ const Instructor = () => {
     currentMaterialId,
     faceParticipants.length,
     finalizeCollectiveVideoAttendance,
+    hasIndividualProvas,
     openCollectiveEvidenceModal,
     orderedMaterialIds,
     requiresFacialValidation,
@@ -990,7 +1082,8 @@ const Instructor = () => {
       }
 
       const loadedProvas = await loadCollectiveProvas()
-      setCollectiveProvas(loadedProvas)
+      setCollectiveProvas(loadedProvas.collectiveSteps)
+      setIndividualProvas(loadedProvas.individualSteps)
       setCollectiveAnswers({})
       setCollectiveResults({})
       setCurrentProvaIndex(0)
@@ -1027,6 +1120,7 @@ const Instructor = () => {
     setIsProvaPhase(false)
     setCurrentMaterialId(orderedMaterialIds[0] ?? null)
     setCollectiveProvas([])
+    setIndividualProvas([])
     setCollectiveAnswers({})
     setCollectiveResults({})
     setCurrentProvaIndex(0)
@@ -1034,11 +1128,15 @@ const Instructor = () => {
     setHasRecordedVideoCompletion(false)
     setIsFaceModalOpen(false)
     setIsCollectiveEvidenceModalOpen(false)
+    setIsQrModalOpen(false)
     setIsEfficacyModalOpen(false)
     setCollectiveDurationHours(0)
     setCollectiveDurationMinutes(15)
     setCollectiveEvidenceFiles([])
     setCollectiveEvidenceError(null)
+    setCollectiveQrState(null)
+    setCollectiveQrError(null)
+    setIsGeneratingQr(false)
     setCollectiveEfficacyLevels({})
     setCollectiveEfficacyError(null)
     setPendingCollectiveFinalMessage(null)
@@ -1054,6 +1152,7 @@ const Instructor = () => {
     setIsProvaPhase(false)
     setCurrentMaterialId(null)
     setCollectiveProvas([])
+    setIndividualProvas([])
     setCollectiveAnswers({})
     setCollectiveResults({})
     setCurrentProvaIndex(0)
@@ -1063,11 +1162,15 @@ const Instructor = () => {
     setActiveTurmaId(null)
     setActiveTurmaNome(null)
     setIsCollectiveEvidenceModalOpen(false)
+    setIsQrModalOpen(false)
     setIsEfficacyModalOpen(false)
     setCollectiveDurationHours(0)
     setCollectiveDurationMinutes(15)
     setCollectiveEvidenceFiles([])
     setCollectiveEvidenceError(null)
+    setCollectiveQrState(null)
+    setCollectiveQrError(null)
+    setIsGeneratingQr(false)
     setCollectiveEfficacyLevels({})
     setCollectiveEfficacyError(null)
     setPendingCollectiveFinalMessage(null)
@@ -1172,12 +1275,14 @@ const Instructor = () => {
       if (evidenceInputRef.current) {
         evidenceInputRef.current.value = ""
       }
-
-      openCollectiveEfficacyModal(
-        pendingCollectiveFinalMessage
-          ? `${pendingCollectiveFinalMessage} Evidencias registradas.`
-          : "Evidencias do treinamento registradas.",
-      )
+      const nextMessage = pendingCollectiveFinalMessage
+        ? `${pendingCollectiveFinalMessage} Evidencias registradas.`
+        : "Evidencias do treinamento registradas."
+      if (hasIndividualProvas) {
+        await openCollectiveIndividualQrModal(nextMessage)
+      } else {
+        openCollectiveEfficacyModal(nextMessage)
+      }
     } catch (error) {
       console.error("Erro ao registrar evidencias do treinamento coletivo:", error)
       setCollectiveEvidenceError(
@@ -1196,6 +1301,8 @@ const Instructor = () => {
     collectiveDurationMinutes,
     collectiveEvidenceFiles,
     instructorCpf,
+    hasIndividualProvas,
+    openCollectiveIndividualQrModal,
     openCollectiveEfficacyModal,
     pendingCollectiveFinalMessage,
   ])
@@ -1248,6 +1355,23 @@ const Instructor = () => {
 
   const canSubmitCollectiveEfficacy =
     efficacyParticipants.length > 0 && collectiveEfficacyAnsweredCount === efficacyParticipants.length
+
+  const handleEnterCollectiveFullscreen = useCallback(async () => {
+    const target = instructorMediaRef.current
+    if (!target || typeof target.requestFullscreen !== "function") return
+
+    try {
+      await target.requestFullscreen()
+      const orientationApi = screen.orientation as
+        | (ScreenOrientation & { lock?: (orientation: "portrait" | "landscape" | "any") => Promise<void> })
+        | undefined
+      if (window.matchMedia("(max-width: 1024px)").matches && orientationApi?.lock) {
+        await orientationApi.lock("landscape").catch(() => undefined)
+      }
+    } catch {
+      // ignore fullscreen errors
+    }
+  }, [])
 
   const handleSubmitCollectiveEfficacy = useCallback(async () => {
     if (!activeTurmaId) {
@@ -1537,6 +1661,16 @@ const Instructor = () => {
                       ? `${currentMaterial.TRILHA_TITULO} - ${currentMaterial.MODULO_NOME}`
                       : ""}
                 </span>
+                {!isProvaPhase && currentMaterial ? (
+                  <Button
+                    text="Tela cheia"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      void handleEnterCollectiveFullscreen()
+                    }}
+                  />
+                ) : null}
               </div>
 
               {isProvaPhase ? (
@@ -1633,36 +1767,38 @@ const Instructor = () => {
                 )
               ) : (
                 currentMaterial ? (
-                  getYouTubeId(currentMaterial.PATH_VIDEO ?? "") ? (
-                    <QueuePlayer
-                      video={currentMaterial.PATH_VIDEO ?? ""}
-                      title={currentMaterial.TITULO}
-                      autoplay={isTrainingStarted}
-                      onEnded={
-                        isTrainingStarted
-                          ? () => {
-                              void advanceToNextMaterial()
-                            }
-                          : undefined
-                      }
-                    />
-                  ) : (
-                    <video
-                      key={`${currentMaterial.id}-${currentMaterial.VERSAO}`}
-                      className={styles.trainingVideo}
-                      controls
-                      autoPlay={isTrainingStarted}
-                      preload="metadata"
-                      src={resolveAssetUrl(currentMaterial.PATH_VIDEO ?? "")}
-                      onEnded={
-                        isTrainingStarted
-                          ? () => {
-                              void advanceToNextMaterial()
-                            }
-                          : undefined
-                      }
-                    />
-                  )
+                  <div ref={instructorMediaRef} className={styles.trainingMediaWrapper}>
+                    {getYouTubeId(currentMaterial.PATH_VIDEO ?? "") ? (
+                      <QueuePlayer
+                        video={currentMaterial.PATH_VIDEO ?? ""}
+                        title={currentMaterial.TITULO}
+                        autoplay={isTrainingStarted}
+                        onEnded={
+                          isTrainingStarted
+                            ? () => {
+                                void advanceToNextMaterial()
+                              }
+                            : undefined
+                        }
+                      />
+                    ) : (
+                      <video
+                        key={`${currentMaterial.id}-${currentMaterial.VERSAO}`}
+                        className={styles.trainingVideo}
+                        controls
+                        autoPlay={isTrainingStarted}
+                        preload="metadata"
+                        src={resolveAssetUrl(currentMaterial.PATH_VIDEO ?? "")}
+                        onEnded={
+                          isTrainingStarted
+                            ? () => {
+                                void advanceToNextMaterial()
+                              }
+                            : undefined
+                        }
+                      />
+                    )}
+                  </div>
                 ) : (
                   <div className={styles.trainingPlayerPlaceholder}>
                     Selecione um video para iniciar.
@@ -1906,6 +2042,9 @@ const Instructor = () => {
           {collectiveEvidenceError ? (
             <p className={styles.trainingProvaError}>{collectiveEvidenceError}</p>
           ) : null}
+          {collectiveQrError ? (
+            <p className={styles.trainingProvaError}>{collectiveQrError}</p>
+          ) : null}
 
           <div className={styles.trainingProvaActions}>
             <Button
@@ -1915,6 +2054,71 @@ const Instructor = () => {
               }}
               isLoading={isSubmittingCollectiveEvidence}
               disabled={!canSubmitCollectiveEvidence || isSubmittingCollectiveEvidence}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isQrModalOpen}
+        onClose={() => {
+          if (isGeneratingQr) return
+          setIsQrModalOpen(false)
+        }}
+        size="md"
+        title="QR Code - Prova Individual"
+      >
+        <div className={styles.trainingEficacyModal}>
+          <p className={styles.trainingEficacyQuestion}>
+            Peça para cada participante ler este QR Code e responder a prova individual no celular.
+          </p>
+          <p className={styles.trainingEficacyHint}>
+            O link expira em {collectiveQrState?.expiresAt ? new Date(collectiveQrState.expiresAt).toLocaleString("pt-BR") : "-"}.
+            Participantes autorizados: {collectiveQrState?.totalUsuarios ?? 0}.
+          </p>
+
+          {collectiveQrState?.qrCodeImageUrl ? (
+            <div className={styles.trainingQrCodeBox}>
+              <img
+                src={collectiveQrState.qrCodeImageUrl}
+                alt="QR Code para prova individual"
+                className={styles.trainingQrCodeImage}
+              />
+            </div>
+          ) : null}
+
+          {collectiveQrState?.redirectUrl ? (
+            <div className={styles.trainingProofLinkBox}>
+              <input
+                className={styles.trainingProofLinkInput}
+                type="text"
+                value={collectiveQrState.redirectUrl}
+                readOnly
+              />
+              <Button
+                text="Copiar link"
+                variant="ghost"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(collectiveQrState.redirectUrl)
+                    .then(() => setFeedbackMessage("Link da prova individual copiado."))
+                    .catch(() => setCollectiveQrError("Nao foi possivel copiar o link."))
+                }}
+              />
+            </div>
+          ) : null}
+
+          {collectiveQrError ? (
+            <p className={styles.trainingProvaError}>{collectiveQrError}</p>
+          ) : null}
+
+          <div className={styles.trainingProvaActions}>
+            <Button
+              text="Finalizar treinamento"
+              onClick={() => {
+                setIsQrModalOpen(false)
+                handleCloseOrderModal()
+              }}
             />
           </div>
         </div>

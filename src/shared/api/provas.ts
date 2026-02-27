@@ -18,6 +18,7 @@ export type ObjectiveProvaPlayerRecord = {
   ID: string
   TRILHA_FK_ID: string
   VERSAO: number
+  MODO_APLICACAO?: "coletiva" | "individual"
   TITULO: string | null
   NOTA_TOTAL: number | null
   ATUALIZADO_EM: string | null
@@ -55,10 +56,49 @@ export type CollectiveObjectiveProvaSubmissionResult =
     aprovacoesRegistradas: number
   }
 
-export async function fetchObjectiveProvaForPlayer(trilhaId: string, cpf?: string) {
+export type CollectiveIndividualProofQrResponse = {
+  token: string
+  redirectUrl: string
+  qrCodeImageUrl: string
+  expiresAt: string
+  totalUsuarios: number
+  trilhas: Array<{
+    ID: string
+    TRILHA_FK_ID: string
+    VERSAO: number
+    MODO_APLICACAO: "coletiva" | "individual"
+    TITULO: string | null
+    NOTA_TOTAL: number | null
+  }>
+}
+
+export type CollectiveIndividualProofTokenResolveResponse = {
+  token: string
+  expiresAt: string
+  turmaId: string | null
+  trilhas: string[]
+  cpfs: string[]
+  provas: Array<{
+    ID: string
+    TRILHA_FK_ID: string
+    VERSAO: number
+    MODO_APLICACAO: "coletiva" | "individual"
+    TITULO: string | null
+    NOTA_TOTAL: number | null
+  }>
+}
+
+export async function fetchObjectiveProvaForPlayer(
+  trilhaId: string,
+  cpf?: string,
+  token?: string,
+) {
   const search = new URLSearchParams()
   if (cpf?.trim()) {
     search.set("cpf", cpf.trim())
+  }
+  if (token?.trim()) {
+    search.set("token", token.trim())
   }
 
   const suffix = search.toString() ? `?${search.toString()}` : ""
@@ -72,6 +112,7 @@ export async function submitObjectiveProvaForPlayer(payload: {
   cpf: string
   respostas: Array<{ questaoId: string; opcaoId: string }>
   user?: Record<string, string>
+  token?: string
 }) {
   return apiFetch<ObjectiveProvaSubmissionResult>(
     `/api/provas/trilha/${encodeURIComponent(payload.trilhaId)}/objectiva/player/submit`,
@@ -81,6 +122,7 @@ export async function submitObjectiveProvaForPlayer(payload: {
         cpf: payload.cpf,
         respostas: payload.respostas,
         user: payload.user,
+        token: payload.token,
       }),
     },
   )
@@ -128,5 +170,30 @@ export async function fetchLatestObjectiveProvaResult(trilhaId: string, cpf: str
       | null
   }>(
     `/api/provas/trilha/${encodeURIComponent(trilhaId)}/objectiva/player/result?cpf=${encodeURIComponent(cpf)}`,
+  )
+}
+
+export async function generateCollectiveIndividualProofQr(payload: {
+  users: Array<Record<string, string>>
+  trilhaIds: string[]
+  turmaId?: string
+}) {
+  return apiFetch<CollectiveIndividualProofQrResponse>(
+    "/api/provas/objectiva/instrutor/individual/qr",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export async function resolveCollectiveIndividualProofToken(token: string, cpf?: string) {
+  const search = new URLSearchParams()
+  if (cpf?.trim()) {
+    search.set("cpf", cpf.trim())
+  }
+  const suffix = search.toString() ? `?${search.toString()}` : ""
+  return apiFetch<CollectiveIndividualProofTokenResolveResponse>(
+    `/api/provas/objectiva/instrutor/individual/qr/${encodeURIComponent(token)}${suffix}`,
   )
 }

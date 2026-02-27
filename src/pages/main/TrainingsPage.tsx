@@ -3,6 +3,9 @@ import { useLocation, useNavigate } from "react-router-dom"
 import styles from "./main.module.css"
 import Modal from "../../shared/ui/modal/Modal"
 import Button from "../../shared/ui/button/Button"
+import FacialEnrollmentModal, {
+  type FacialCaptureResult,
+} from "../../shared/ui/facial/FacialEnrollmentModal"
 import { useReadViewContext } from "../../app/readViewContext"
 import type { ReadViewResponse, PFuncItem } from "../../shared/types/readView"
 import {
@@ -13,14 +16,21 @@ import {
 } from "../../shared/api/trainings"
 import { fetchUserPdfs, type PdfItem } from "../../shared/api/pdfs"
 import {
+  attachCollectiveTrainingFaceEvidence,
   completeVideoTraining,
   listCompletedVideoTrainings,
   submitTrilhaTrainingEfficacy,
 } from "../../shared/api/userTrainings"
 import {
+  getPlatformSatisfactionStatus,
+  submitPlatformSatisfaction,
+} from "../../shared/api/feedbacks"
+import {
   fetchLatestObjectiveProvaResult,
   fetchObjectiveProvaForPlayer,
+  resolveCollectiveIndividualProofToken,
   submitObjectiveProvaForPlayer,
+  type CollectiveIndividualProofTokenResolveResponse,
   type ObjectiveProvaPlayerRecord,
   type ObjectiveProvaSubmissionResult,
 } from "../../shared/api/provas"
@@ -32,6 +42,14 @@ import {
   TRAINING_EFFICACY_OPTIONS,
   TRAINING_EFFICACY_QUESTION,
 } from "../../shared/constants/trainingEfficacy"
+import {
+  PLATFORM_SATISFACTION_OPTIONS,
+  PLATFORM_SATISFACTION_QUESTION,
+} from "../../shared/constants/platformSatisfaction"
+import {
+  readCollectiveProofTokenFromStorage,
+  saveCollectiveProofToken,
+} from "../../shared/utils/collectiveProofToken"
 
 const assetsBase = (import.meta.env.VITE_PUBLIC_ASSETS_URL ?? "").replace(/\/$/, "")
 
@@ -304,6 +322,13 @@ type TrainingsRouteState = {
   }
 }
 
+type TokenProofInfo = {
+  trilhaId: string
+  provaId: string
+  provaTitulo: string
+  provaVersao: number
+}
+
 const TrainingsPage = () => {
   const { data } = useReadViewContext<ReadViewResponse>()
   const location = useLocation()
@@ -334,7 +359,25 @@ const TrainingsPage = () => {
   const [efficacyError, setEfficacyError] = useState<string | null>(null)
   const [isSubmittingEfficacy, setIsSubmittingEfficacy] = useState(false)
   const [pendingEfficacyFinalMessage, setPendingEfficacyFinalMessage] = useState<string | null>(null)
+  const [isSatisfactionModalOpen, setIsSatisfactionModalOpen] = useState(false)
+  const [satisfactionLevel, setSatisfactionLevel] = useState<number | null>(null)
+  const [satisfactionError, setSatisfactionError] = useState<string | null>(null)
+  const [isSubmittingSatisfaction, setIsSubmittingSatisfaction] = useState(false)
+  const [collectiveProofToken, setCollectiveProofToken] = useState<string | null>(() =>
+    readCollectiveProofTokenFromStorage(),
+  )
+  const [tokenProofContext, setTokenProofContext] =
+    useState<CollectiveIndividualProofTokenResolveResponse | null>(null)
+  const [isResolvingTokenProof, setIsResolvingTokenProof] = useState(false)
+  const [tokenProofError, setTokenProofError] = useState<string | null>(null)
+  const [isFaceModalOpen, setIsFaceModalOpen] = useState(false)
+  const [isSubmittingFaceEvidence, setIsSubmittingFaceEvidence] = useState(false)
+  const [faceEvidenceError, setFaceEvidenceError] = useState<string | null>(null)
+  const [pendingFaceFinalMessage, setPendingFaceFinalMessage] = useState<string | null>(null)
   const lastProgressSecondRef = useRef(0)
+  const playerMediaRef = useRef<HTMLDivElement | null>(null)
+  const satisfactionPromptShownRef = useRef(false)
+  const autoOpenedTokenRef = useRef<string | null>(null)
 
   const pfunc: PFuncItem | undefined = Array.isArray(data?.PFunc)
     ? data?.PFunc[0]
@@ -345,8 +388,25 @@ const TrainingsPage = () => {
     return raw.replace(/\D/g, "")
   }, [data?.User?.CPF, pfunc?.CPF])
 
+  useEffect(() => {
+    satisfactionPromptShownRef.current = false
+  }, [cpf])
+
   const routeState = location.state as TrainingsRouteState | null
   const focusTraining = routeState?.focusTraining ?? null
+
+  const tokenProofsByTrilha = useMemo(() => {
+    const map = new Map<string, TokenProofInfo>()
+    for (const prova of tokenProofContext?.provas ?? []) {
+      map.set(prova.TRILHA_FK_ID, {
+        trilhaId: prova.TRILHA_FK_ID,
+        provaId: prova.ID,
+        provaTitulo: prova.TITULO?.trim() || "Prova individual",
+        provaVersao: prova.VERSAO,
+      })
+    }
+    return map
+  }, [tokenProofContext?.provas])
 
   const userPayload = useMemo(() => {
     const source = Array.isArray(data?.PFunc) ? data.PFunc[0] : data?.PFunc
@@ -368,6 +428,48 @@ const TrainingsPage = () => {
 
     return payload
   }, [cpf, data?.PFunc])
+
+  useEffect(() => {
+    const stored = readCollectiveProofTokenFromStorage()
+    if (!stored || stored === collectiveProofToken) return
+    setCollectiveProofToken(stored)
+  }, [collectiveProofToken])
+
+  useEffect(() => {
+    if (!cpf || cpf.length !== 11 || !collectiveProofToken) {
+      setTokenProofContext(null)
+      setTokenProofError(null)
+      return
+    }
+
+    let cancelled = false
+    setIsResolvingTokenProof(true)
+    setTokenProofError(null)
+
+    resolveCollectiveIndividualProofToken(collectiveProofToken, cpf)
+      .then((response) => {
+        if (cancelled) return
+        setTokenProofContext(response)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Erro ao validar token de prova coletiva:", err)
+        setTokenProofContext(null)
+        setTokenProofError(
+          err instanceof Error ? err.message : "Nao foi possivel validar a prova individual.",
+        )
+        saveCollectiveProofToken(null)
+        setCollectiveProofToken(null)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setIsResolvingTokenProof(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [cpf, collectiveProofToken])
 
   useEffect(() => {
     if (!cpf || cpf.length !== 11) {
@@ -446,8 +548,12 @@ const TrainingsPage = () => {
     setIsObjectiveLoading(true)
     setObjectiveError(null)
 
+    const activeTokenProof = tokenProofsByTrilha.get(activeTrilhaId)
+    const tokenToUse =
+      activeTokenProof && collectiveProofToken ? collectiveProofToken : undefined
+
     Promise.all([
-      fetchObjectiveProvaForPlayer(activeTrilhaId, cpf),
+      fetchObjectiveProvaForPlayer(activeTrilhaId, cpf, tokenToUse),
       fetchLatestObjectiveProvaResult(activeTrilhaId, cpf),
     ])
       .then(([provaResponse, latestResultResponse]) => {
@@ -506,7 +612,7 @@ const TrainingsPage = () => {
     return () => {
       cancelled = true
     }
-  }, [activeTrilhaId, cpf, isPlayerModalOpen])
+  }, [activeTrilhaId, collectiveProofToken, cpf, isPlayerModalOpen, tokenProofsByTrilha])
 
   useEffect(() => {
     if (!isPlayerModalOpen || !objectiveProva || activeQueue.length === 0) {
@@ -557,14 +663,55 @@ const TrainingsPage = () => {
   }, [pdfs])
 
   const trilhaCards = useMemo(
-    () =>
-      trilhas.map((trilha) => ({
+    () => {
+      const cards = trilhas.map((trilha) => ({
         trilha,
         videoCount: (videosByTrilha.get(trilha.ID) ?? []).length,
         pdfCount: (pdfsByTrilha.get(trilha.ID) ?? []).length,
-      })),
-    [pdfsByTrilha, trilhas, videosByTrilha],
+        tokenProof: tokenProofsByTrilha.get(trilha.ID) ?? null,
+      }))
+
+      for (const tokenProof of tokenProofsByTrilha.values()) {
+        if (cards.some((item) => item.trilha.ID === tokenProof.trilhaId)) {
+          continue
+        }
+
+        cards.push({
+          trilha: {
+            ID: tokenProof.trilhaId,
+            MODULO_FK_ID: "__token__",
+            TITULO: `Prova Individual - ${tokenProof.provaTitulo}`,
+          },
+          videoCount: 0,
+          pdfCount: 0,
+          tokenProof,
+        })
+      }
+
+      return cards
+    },
+    [pdfsByTrilha, tokenProofsByTrilha, trilhas, videosByTrilha],
   )
+
+  const maybePromptPlatformSatisfaction = useCallback(async () => {
+    if (!cpf || cpf.length !== 11 || satisfactionPromptShownRef.current) {
+      return
+    }
+
+    try {
+      const status = await getPlatformSatisfactionStatus(cpf)
+      if (!status.deveExibir) {
+        return
+      }
+
+      setSatisfactionLevel(null)
+      setSatisfactionError(null)
+      setIsSatisfactionModalOpen(true)
+      satisfactionPromptShownRef.current = true
+    } catch (err) {
+      console.error("Erro ao consultar pesquisa de satisfacao:", err)
+    }
+  }, [cpf])
 
   const handleCompleteVideo = useCallback(async (video: VideoItem) => {
     if (!cpf || cpf.length !== 11) return null
@@ -585,18 +732,23 @@ const TrainingsPage = () => {
         [key]: result.completedAt,
       }))
       clearLastWatchedProgressByVideo(cpf, video.ID, video.VERSAO)
+      void maybePromptPlatformSatisfaction()
 
       return result.completedAt
     } catch (err) {
       console.error("Erro ao registrar conclusao do video:", err)
       return null
     }
-  }, [completedByKey, cpf, userPayload])
+  }, [completedByKey, cpf, maybePromptPlatformSatisfaction, userPayload])
 
-  const openTrilhaPlayer = useCallback((trilha: TrilhaItem, preferredVideoId?: string | null) => {
+  const openTrilhaPlayer = useCallback((
+    trilha: TrilhaItem,
+    preferredVideoId?: string | null,
+    tokenProof?: TokenProofInfo | null,
+  ) => {
     const trilhaVideos = videosByTrilha.get(trilha.ID) ?? []
     const trilhaPdfs = pdfsByTrilha.get(trilha.ID) ?? []
-    if (trilhaVideos.length === 0 && trilhaPdfs.length === 0) {
+    if (trilhaVideos.length === 0 && trilhaPdfs.length === 0 && !tokenProof) {
       return
     }
 
@@ -616,8 +768,12 @@ const TrainingsPage = () => {
     setActiveTrilhaId(trilha.ID)
     setCurrentVideoId(startVideo?.ID ?? null)
     setCurrentPdfId(startVideo ? null : (trilhaPdfs[0]?.ID ?? null))
-    setPlayerMessage(null)
-    setIsObjectivePhase(false)
+    setPlayerMessage(
+      tokenProof && trilhaVideos.length === 0
+        ? "Prova individual liberada via QR Code. Responda para concluir."
+        : null,
+    )
+    setIsObjectivePhase(Boolean(tokenProof) && trilhaVideos.length === 0)
     setObjectiveAnswers({})
     setObjectiveError(null)
     setObjectiveResult(null)
@@ -647,6 +803,10 @@ const TrainingsPage = () => {
     setEfficacyError(null)
     setIsSubmittingEfficacy(false)
     setPendingEfficacyFinalMessage(null)
+    setIsFaceModalOpen(false)
+    setIsSubmittingFaceEvidence(false)
+    setFaceEvidenceError(null)
+    setPendingFaceFinalMessage(null)
   }
 
   const openTrilhaEfficacyModal = useCallback((finalMessage: string) => {
@@ -699,20 +859,66 @@ const TrainingsPage = () => {
       return
     }
 
-    const trilha = trilhas.find((item) => item.ID === focusTraining.trilhaId)
+    const trilha =
+      trilhas.find((item) => item.ID === focusTraining.trilhaId) ??
+      ({
+        ID: focusTraining.trilhaId,
+        MODULO_FK_ID: "__token__",
+        TITULO:
+          tokenProofsByTrilha.get(focusTraining.trilhaId)?.provaTitulo ??
+          "Prova individual",
+      } as TrilhaItem)
     if (!trilha) {
       return
     }
 
-    openTrilhaPlayer(trilha, focusTraining.videoId)
+    openTrilhaPlayer(
+      trilha,
+      focusTraining.videoId,
+      tokenProofsByTrilha.get(focusTraining.trilhaId) ?? null,
+    )
     navigate(location.pathname, { replace: true, state: null })
   }, [
     focusTraining,
     isPlayerModalOpen,
+    tokenProofsByTrilha,
     trilhas,
     openTrilhaPlayer,
     navigate,
     location.pathname,
+  ])
+
+  useEffect(() => {
+    if (!collectiveProofToken || !tokenProofContext?.provas?.length || isPlayerModalOpen) {
+      if (!collectiveProofToken) {
+        autoOpenedTokenRef.current = null
+      }
+      return
+    }
+
+    if (autoOpenedTokenRef.current === collectiveProofToken) {
+      return
+    }
+
+    const firstProof = tokenProofContext.provas[0]
+    const tokenProof = tokenProofsByTrilha.get(firstProof.TRILHA_FK_ID) ?? null
+    const trilha =
+      trilhas.find((item) => item.ID === firstProof.TRILHA_FK_ID) ??
+      ({
+        ID: firstProof.TRILHA_FK_ID,
+        MODULO_FK_ID: "__token__",
+        TITULO: tokenProof?.provaTitulo ?? "Prova individual",
+      } as TrilhaItem)
+
+    autoOpenedTokenRef.current = collectiveProofToken
+    openTrilhaPlayer(trilha, null, tokenProof)
+  }, [
+    collectiveProofToken,
+    isPlayerModalOpen,
+    openTrilhaPlayer,
+    tokenProofContext?.provas,
+    tokenProofsByTrilha,
+    trilhas,
   ])
 
   useEffect(() => {
@@ -869,18 +1075,30 @@ const TrainingsPage = () => {
         questaoId: question.ID,
         opcaoId: objectiveAnswers[question.ID],
       }))
+      const activeTokenProof = tokenProofsByTrilha.get(activeTrilhaId)
+      const tokenToUse =
+        activeTokenProof && collectiveProofToken ? collectiveProofToken : undefined
 
       const result = await submitObjectiveProvaForPlayer({
         trilhaId: activeTrilhaId,
         cpf,
         respostas,
         user: userPayload,
+        token: tokenToUse,
       })
       setObjectiveResult(result)
       if (result.aprovado) {
-        openTrilhaEfficacyModal(
-          "Prova concluida com sucesso. Voce foi aprovado e a trilha foi finalizada.",
-        )
+        if (tokenToUse && tokenProofContext?.turmaId) {
+          setPendingFaceFinalMessage(
+            "Prova concluida com sucesso. Realize agora a coleta facial para finalizar.",
+          )
+          setFaceEvidenceError(null)
+          setIsFaceModalOpen(true)
+        } else {
+          openTrilhaEfficacyModal(
+            "Prova concluida com sucesso. Voce foi aprovado e a trilha foi finalizada.",
+          )
+        }
       } else {
         setPlayerMessage("Prova concluida. Voce foi reprovado e pode tentar novamente.")
       }
@@ -890,13 +1108,103 @@ const TrainingsPage = () => {
     } finally {
       setIsSubmittingObjective(false)
     }
-  }, [activeTrilhaId, cpf, objectiveAnswers, objectiveProva, openTrilhaEfficacyModal, userPayload])
+  }, [
+    activeTrilhaId,
+    collectiveProofToken,
+    cpf,
+    objectiveAnswers,
+    objectiveProva,
+    openTrilhaEfficacyModal,
+    tokenProofContext?.turmaId,
+    tokenProofsByTrilha,
+    userPayload,
+  ])
+
+  const selfFaceParticipants = useMemo(() => {
+    if (!cpf || cpf.length !== 11) return []
+    const fallbackName =
+      (Array.isArray(data?.PFunc) ? data.PFunc[0]?.NOME : data?.PFunc?.NOME) ||
+      "Colaborador"
+    return [
+      {
+        id: cpf,
+        cpf,
+        nome: String(fallbackName).trim() || "Colaborador",
+        raw: {
+          ...(userPayload ?? {}),
+          CPF: cpf,
+          NOME: String(fallbackName).trim() || "Colaborador",
+        },
+      },
+    ]
+  }, [cpf, data?.PFunc, userPayload])
+
+  const handleFaceCompleted = useCallback(
+    async (captures: FacialCaptureResult[]) => {
+      setIsFaceModalOpen(false)
+      const turmaId = tokenProofContext?.turmaId
+      if (!turmaId || captures.length === 0) {
+        openTrilhaEfficacyModal(
+          pendingFaceFinalMessage ?? "Coleta facial concluida. Continue para a avaliacao de eficacia.",
+        )
+        setPendingFaceFinalMessage(null)
+        return
+      }
+
+      try {
+        setIsSubmittingFaceEvidence(true)
+        setFaceEvidenceError(null)
+        await attachCollectiveTrainingFaceEvidence({
+          turmaId,
+          captures: captures.map((capture) => ({
+            cpf: capture.cpf,
+            fotoBase64: capture.fotoUrl ? null : (capture.fotoBase64 ?? null),
+            fotoUrl: capture.fotoUrl ?? null,
+            createdAt: capture.createdAt,
+          })),
+        })
+
+        openTrilhaEfficacyModal(
+          pendingFaceFinalMessage
+            ? `${pendingFaceFinalMessage} Facial registrada com sucesso.`
+            : "Facial registrada com sucesso.",
+        )
+        setPendingFaceFinalMessage(null)
+      } catch (err) {
+        console.error("Erro ao anexar facial do treinamento coletivo:", err)
+        setFaceEvidenceError(
+          err instanceof Error ? err.message : "Nao foi possivel registrar a coleta facial.",
+        )
+        setIsFaceModalOpen(true)
+      } finally {
+        setIsSubmittingFaceEvidence(false)
+      }
+    },
+    [openTrilhaEfficacyModal, pendingFaceFinalMessage, tokenProofContext?.turmaId],
+  )
 
   const handleRetryObjective = useCallback(() => {
     setObjectiveAnswers({})
     setObjectiveResult(null)
     setObjectiveError(null)
     setPlayerMessage("Responda novamente a prova objetiva.")
+  }, [])
+
+  const handleEnterVideoFullscreen = useCallback(async () => {
+    const target = playerMediaRef.current
+    if (!target || typeof target.requestFullscreen !== "function") return
+
+    try {
+      await target.requestFullscreen()
+      const orientationApi = screen.orientation as
+        | (ScreenOrientation & { lock?: (orientation: "portrait" | "landscape" | "any") => Promise<void> })
+        | undefined
+      if (window.matchMedia("(max-width: 1024px)").matches && orientationApi?.lock) {
+        await orientationApi.lock("landscape").catch(() => undefined)
+      }
+    } catch {
+      // ignore fullscreen errors
+    }
   }, [])
 
   const handleSubmitTrilhaEfficacy = useCallback(async () => {
@@ -925,6 +1233,31 @@ const TrainingsPage = () => {
           : "Avaliacao de eficacia registrada com sucesso.",
       )
       setPendingEfficacyFinalMessage(null)
+
+      const isTokenFlow =
+        Boolean(collectiveProofToken) &&
+        Boolean(activeTrilhaId) &&
+        tokenProofsByTrilha.has(activeTrilhaId)
+      if (isTokenFlow) {
+        const remainingProofs =
+          tokenProofContext?.provas?.filter((item) => item.TRILHA_FK_ID !== activeTrilhaId) ??
+          []
+        if (remainingProofs.length === 0) {
+          saveCollectiveProofToken(null)
+          setCollectiveProofToken(null)
+          setTokenProofContext(null)
+        } else {
+          setTokenProofContext((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  provas: remainingProofs,
+                  trilhas: remainingProofs.map((item) => item.TRILHA_FK_ID),
+                }
+              : prev,
+          )
+        }
+      }
     } catch (err) {
       console.error("Erro ao registrar avaliacao de eficacia da trilha:", err)
       setEfficacyError(
@@ -933,7 +1266,48 @@ const TrainingsPage = () => {
     } finally {
       setIsSubmittingEfficacy(false)
     }
-  }, [activeTrilhaId, cpf, efficacyLevel, pendingEfficacyFinalMessage])
+  }, [
+    activeTrilhaId,
+    collectiveProofToken,
+    cpf,
+    efficacyLevel,
+    pendingEfficacyFinalMessage,
+    tokenProofContext?.provas,
+    tokenProofsByTrilha,
+  ])
+
+  const handleSubmitPlatformSatisfaction = useCallback(async () => {
+    if (!cpf || cpf.length !== 11) {
+      return
+    }
+    if (!satisfactionLevel) {
+      setSatisfactionError("Selecione uma opcao para responder a pesquisa.")
+      return
+    }
+
+    try {
+      setIsSubmittingSatisfaction(true)
+      setSatisfactionError(null)
+      await submitPlatformSatisfaction({
+        cpf,
+        nivelSatisfacao: satisfactionLevel,
+        respondidoEm: new Date().toISOString(),
+      })
+      setIsSatisfactionModalOpen(false)
+    } catch (err) {
+      console.error("Erro ao responder pesquisa de satisfacao:", err)
+      setSatisfactionError(
+        err instanceof Error ? err.message : "Nao foi possivel enviar a resposta.",
+      )
+    } finally {
+      setIsSubmittingSatisfaction(false)
+    }
+  }, [cpf, satisfactionLevel])
+
+  const isActiveTokenProofFlow = useMemo(() => {
+    if (!activeTrilhaId) return false
+    return Boolean(collectiveProofToken) && tokenProofsByTrilha.has(activeTrilhaId)
+  }, [activeTrilhaId, collectiveProofToken, tokenProofsByTrilha])
 
   return (
     <>
@@ -951,6 +1325,9 @@ const TrainingsPage = () => {
 
           {isLoading ? <p>Carregando treinamentos...</p> : null}
           {error ? <p className={styles.trainingEmpty}>Erro: {error}</p> : null}
+          {isResolvingTokenProof ? <p>Validando prova individual do QR Code...</p> : null}
+          {tokenProofError ? <p className={styles.trainingEmpty}>Erro: {tokenProofError}</p> : null}
+          {faceEvidenceError ? <p className={styles.trainingEmpty}>Erro: {faceEvidenceError}</p> : null}
 
           {!isLoading && !error && trilhaCards.length === 0 ? (
             <p className={styles.trainingEmpty}>Nenhum treinamento atribuido.</p>
@@ -958,17 +1335,18 @@ const TrainingsPage = () => {
 
           {!isLoading && !error && trilhaCards.length > 0 ? (
             <div className={styles.trainingCardsGrid}>
-              {trilhaCards.map(({ trilha, videoCount, pdfCount }) => (
+              {trilhaCards.map(({ trilha, videoCount, pdfCount, tokenProof }) => (
                 <article key={trilha.ID} className={styles.trainingTrilhaCard}>
                   <h4 className={styles.trainingBlockTitle}>{trilha.TITULO}</h4>
                   <p className={styles.trainingMeta}>
                     {videoCount} {videoCount === 1 ? "video" : "videos"}
                     {pdfCount > 0 ? ` + ${pdfCount} ${pdfCount === 1 ? "pdf" : "pdfs"}` : ""}
+                    {tokenProof ? " + prova individual" : ""}
                   </p>
                   <Button
                     text="Assistir"
-                    onClick={() => openTrilhaPlayer(trilha)}
-                    disabled={videoCount === 0 && pdfCount === 0}
+                    onClick={() => openTrilhaPlayer(trilha, null, tokenProof)}
+                    disabled={videoCount === 0 && pdfCount === 0 && !tokenProof}
                   />
                 </article>
               ))}
@@ -1014,6 +1392,16 @@ const TrainingsPage = () => {
                       ? `Video ${currentVideoIndex + 1} de ${activeQueue.length}`
                       : ""}
                 </span>
+                {!isObjectivePhase && currentVideo ? (
+                  <Button
+                    text="Tela cheia"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      void handleEnterVideoFullscreen()
+                    }}
+                  />
+                ) : null}
               </div>
 
               {isObjectivePhase ? (
@@ -1090,7 +1478,18 @@ const TrainingsPage = () => {
                           disabled={isSubmittingObjective || answeredCount < totalQuestions}
                         />
                       ) : objectiveResult.aprovado ? (
-                        <Button text="Fechar" onClick={closeTrilhaPlayer} />
+                        isActiveTokenProofFlow ? (
+                          <Button
+                            text="Coletar Facial"
+                            onClick={() => {
+                              setFaceEvidenceError(null)
+                              setIsFaceModalOpen(true)
+                            }}
+                            isLoading={isSubmittingFaceEvidence}
+                          />
+                        ) : (
+                          <Button text="Fechar" onClick={closeTrilhaPlayer} />
+                        )
                       ) : (
                         <Button text="Tentar Novamente" onClick={handleRetryObjective} />
                       )}
@@ -1123,28 +1522,30 @@ const TrainingsPage = () => {
                   />
                 </div>
               ) : currentVideo ? (
-                getYouTubeId(currentVideo.PATH_VIDEO ?? "") ? (
-                  <YouTubeQueuePlayer
-                    video={currentVideo.PATH_VIDEO ?? ""}
-                    title={resolveVideoTitle(currentVideo.PATH_VIDEO)}
-                    onEnded={() => {
-                      void advanceToNextVideo()
-                    }}
-                  />
-                ) : (
-                  <video
-                    key={`${currentVideo.ID}-${currentVideo.VERSAO ?? 1}`}
-                    className={styles.trainingVideo}
-                    controls
-                    autoPlay
-                    preload="metadata"
-                    src={resolveAssetUrl(currentVideo.PATH_VIDEO ?? "")}
-                    onTimeUpdate={handleHtmlVideoTimeUpdate}
-                    onEnded={() => {
-                      void advanceToNextVideo()
-                    }}
-                  />
-                )
+                <div ref={playerMediaRef} className={styles.trainingMediaWrapper}>
+                  {getYouTubeId(currentVideo.PATH_VIDEO ?? "") ? (
+                    <YouTubeQueuePlayer
+                      video={currentVideo.PATH_VIDEO ?? ""}
+                      title={resolveVideoTitle(currentVideo.PATH_VIDEO)}
+                      onEnded={() => {
+                        void advanceToNextVideo()
+                      }}
+                    />
+                  ) : (
+                    <video
+                      key={`${currentVideo.ID}-${currentVideo.VERSAO ?? 1}`}
+                      className={styles.trainingVideo}
+                      controls
+                      autoPlay
+                      preload="metadata"
+                      src={resolveAssetUrl(currentVideo.PATH_VIDEO ?? "")}
+                      onTimeUpdate={handleHtmlVideoTimeUpdate}
+                      onEnded={() => {
+                        void advanceToNextVideo()
+                      }}
+                    />
+                  )}
+                </div>
               ) : (
                 <div className={styles.trainingPlayerPlaceholder}>Nenhum video disponivel.</div>
               )}
@@ -1285,6 +1686,65 @@ const TrainingsPage = () => {
           </div>
         </div>
       </Modal>
+
+      <Modal
+        open={isSatisfactionModalOpen}
+        onClose={() => setIsSatisfactionModalOpen(false)}
+        size="md"
+        title="Pesquisa de Satisfacao da Plataforma"
+      >
+        <div className={styles.trainingEficacyModal}>
+          <p className={styles.trainingEficacyQuestion}>{PLATFORM_SATISFACTION_QUESTION}</p>
+
+          <div className={styles.trainingEficacyOptions}>
+            {PLATFORM_SATISFACTION_OPTIONS.map((option) => (
+              <label key={option.value} className={styles.trainingEficacyOption}>
+                <input
+                  type="radio"
+                  name="platform-satisfaction"
+                  checked={satisfactionLevel === option.value}
+                  onChange={() => {
+                    setSatisfactionLevel(option.value)
+                    setSatisfactionError(null)
+                  }}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+
+          {satisfactionError ? <p className={styles.trainingProvaError}>{satisfactionError}</p> : null}
+
+          <div className={styles.trainingProvaActions}>
+            <Button
+              text="Responder depois"
+              variant="ghost"
+              onClick={() => setIsSatisfactionModalOpen(false)}
+            />
+            <Button
+              text="Enviar resposta"
+              onClick={() => {
+                void handleSubmitPlatformSatisfaction()
+              }}
+              isLoading={isSubmittingSatisfaction}
+              disabled={!satisfactionLevel || isSubmittingSatisfaction}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <FacialEnrollmentModal
+        open={isFaceModalOpen}
+        onClose={() => {
+          if (isSubmittingFaceEvidence) return
+          setIsFaceModalOpen(false)
+        }}
+        participants={selfFaceParticipants}
+        instructorCpf={cpf}
+        onCompleted={(captures) => {
+          void handleFaceCompleted(captures)
+        }}
+      />
     </>
   )
 }

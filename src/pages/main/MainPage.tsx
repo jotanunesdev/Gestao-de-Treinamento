@@ -5,17 +5,19 @@ import Aside from "../../shared/ui/aside/Aside"
 import Button from "../../shared/ui/button/Button"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import {
+  faBars,
   faChartLine,
   faClipboardList,
   faCircleCheck,
   faChalkboardUser,
   faGear,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons"
 import { useEffect, useState } from "react"
 
 // Hooks
 import { useReadViewContext } from "../../app/readViewContext"
-import { NavLink, Outlet, useNavigate } from "react-router-dom"
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import type { ReadViewResponse, PFuncItem } from "../../shared/types/readView"
 import { ROUTES } from "../../app/paths"
 import { getUserByCpf } from "../../shared/api/users"
@@ -37,7 +39,9 @@ const MAIN_NAV_ITEMS = [
 const MainPage = () => {
   const { data, setData, clearData } = useReadViewContext<ReadViewResponse>()
   const navigate = useNavigate()
+  const location = useLocation()
   const [theme, setTheme] = useState<Theme>(() => getStoredTheme())
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const pfunc: PFuncItem | undefined = Array.isArray(data?.PFunc)
     ? data?.PFunc[0]
@@ -95,6 +99,46 @@ const MainPage = () => {
     }
   }, [cpfDigits, data, setData])
 
+  useEffect(() => {
+    setIsMobileMenuOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    const handleFullscreenChange = async () => {
+      const orientationApi = screen.orientation as
+        | (ScreenOrientation & { lock?: (orientation: "portrait" | "landscape" | "any") => Promise<void> })
+        | undefined
+      if (!orientationApi) return
+
+      const isMobileViewport = window.matchMedia("(max-width: 1024px)").matches
+      if (!isMobileViewport) return
+
+      if (document.fullscreenElement) {
+        if (typeof orientationApi.lock === "function") {
+          try {
+            await orientationApi.lock("landscape")
+          } catch {
+            // mobile browser can reject lock depending on gesture/policy
+          }
+        }
+        return
+      }
+
+      if (typeof orientationApi.unlock === "function") {
+        try {
+          orientationApi.unlock()
+        } catch {
+          // ignore unlock failures
+        }
+      }
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange)
+    }
+  }, [])
+
   const handleLogout = () => {
     clearData()
     navigate(ROUTES.login, { replace: true })
@@ -104,8 +148,25 @@ const MainPage = () => {
 
   return (
     <div className={styles.main}>
+      <button
+        type="button"
+        className={styles.mobileMenuButton}
+        aria-label={isMobileMenuOpen ? "Fechar menu" : "Abrir menu"}
+        aria-expanded={isMobileMenuOpen}
+        onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+      >
+        <FontAwesomeIcon icon={isMobileMenuOpen ? faXmark : faBars} />
+      </button>
+      {isMobileMenuOpen ? (
+        <button
+          type="button"
+          className={styles.mobileMenuBackdrop}
+          aria-label="Fechar menu"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      ) : null}
       <Aside
-        className={styles.asideSlot}
+        className={`${styles.asideSlot} ${isMobileMenuOpen ? styles.asideMobileOpen : styles.asideMobileClosed}`}
         logoSrc={logoSrc}
         title="Bem Vindo(a)!"
         userCompany={pfunc?.NOMEFILIAL}
@@ -124,6 +185,7 @@ const MainPage = () => {
                     ? `${styles.asideLink} ${styles.asideLinkActive}`
                     : styles.asideLink
                 }
+                onClick={() => setIsMobileMenuOpen(false)}
               >
                 <FontAwesomeIcon icon={item.icon} className={styles.asideLinkIcon} />
                 {item.label}

@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom"
 import styles from "./main.module.css"
 import GaugeChart from "../../shared/ui/Gauge/GaugeChart"
 import Button from "../../shared/ui/button/Button"
-import Modal from "../../shared/ui/modal/Modal"
 import { useReadViewContext } from "../../app/readViewContext"
 import type { ReadViewResponse, PFuncItem } from "../../shared/types/readView"
 import {
@@ -13,18 +12,10 @@ import {
   type VideoItem,
 } from "../../shared/api/trainings"
 import { listCompletedVideoTrainings } from "../../shared/api/userTrainings"
-import {
-  getPlatformSatisfactionStatus,
-  submitPlatformSatisfaction,
-} from "../../shared/api/feedbacks"
 import { getLastWatchedProgress } from "../../shared/utils/learningProgress"
 import { ROUTES } from "../../app/paths"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { faCircleCheck, faPlay, faTrophy } from "@fortawesome/free-solid-svg-icons"
-import {
-  PLATFORM_SATISFACTION_OPTIONS,
-  PLATFORM_SATISFACTION_QUESTION,
-} from "../../shared/constants/platformSatisfaction"
 
 const assetsBase = (import.meta.env.VITE_PUBLIC_ASSETS_URL ?? "").replace(/\/$/, "")
 
@@ -183,10 +174,6 @@ const DashboardPage = () => {
   const [completedByKey, setCompletedByKey] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isSatisfactionModalOpen, setIsSatisfactionModalOpen] = useState(false)
-  const [satisfactionLevel, setSatisfactionLevel] = useState<number | null>(null)
-  const [satisfactionError, setSatisfactionError] = useState<string | null>(null)
-  const [isSubmittingSatisfaction, setIsSubmittingSatisfaction] = useState(false)
 
   const pfunc: PFuncItem | undefined = Array.isArray(data?.PFunc)
     ? data?.PFunc[0]
@@ -250,54 +237,6 @@ const DashboardPage = () => {
       cancelled = true
     }
   }, [cpf])
-
-  useEffect(() => {
-    if (!cpf || cpf.length !== 11) return
-
-    let cancelled = false
-    getPlatformSatisfactionStatus(cpf)
-      .then((status) => {
-        if (cancelled) return
-        if (status.deveExibir) {
-          setSatisfactionLevel(null)
-          setSatisfactionError(null)
-          setIsSatisfactionModalOpen(true)
-        }
-      })
-      .catch((err) => {
-        console.error("Erro ao consultar pesquisa de satisfacao:", err)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [cpf])
-
-  const handleSubmitSatisfaction = useCallback(async () => {
-    if (!cpf || cpf.length !== 11) return
-    if (!satisfactionLevel) {
-      setSatisfactionError("Selecione uma opcao para responder a pesquisa.")
-      return
-    }
-
-    try {
-      setIsSubmittingSatisfaction(true)
-      setSatisfactionError(null)
-      await submitPlatformSatisfaction({
-        cpf,
-        nivelSatisfacao: satisfactionLevel,
-        respondidoEm: new Date().toISOString(),
-      })
-      setIsSatisfactionModalOpen(false)
-    } catch (err) {
-      console.error("Erro ao responder pesquisa de satisfacao:", err)
-      setSatisfactionError(
-        err instanceof Error ? err.message : "Nao foi possivel enviar a resposta.",
-      )
-    } finally {
-      setIsSubmittingSatisfaction(false)
-    }
-  }, [cpf, satisfactionLevel])
 
   const videosByTrilha = useMemo(() => {
     const map = new Map<string, VideoItem[]>()
@@ -552,47 +491,6 @@ const DashboardPage = () => {
           ) : null}
         </div>
       </section>
-
-      <Modal
-        open={isSatisfactionModalOpen}
-        onClose={() => setIsSatisfactionModalOpen(false)}
-        title="Pesquisa de Satisfacao da Plataforma"
-        size="md"
-      >
-        <div className={styles.trainingEficacyModal}>
-          <p className={styles.trainingEficacyQuestion}>{PLATFORM_SATISFACTION_QUESTION}</p>
-          <div className={styles.trainingEficacyOptions}>
-            {PLATFORM_SATISFACTION_OPTIONS.map((option) => (
-              <label key={option.value} className={styles.trainingEficacyOption}>
-                <input
-                  type="radio"
-                  name="platform-satisfaction"
-                  checked={satisfactionLevel === option.value}
-                  onChange={() => {
-                    setSatisfactionLevel(option.value)
-                    setSatisfactionError(null)
-                  }}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
-          {satisfactionError ? (
-            <p className={styles.trainingProvaError}>{satisfactionError}</p>
-          ) : null}
-          <div className={styles.trainingProvaActions}>
-            <Button text="Responder depois" variant="ghost" onClick={() => setIsSatisfactionModalOpen(false)} />
-            <Button
-              text="Enviar resposta"
-              onClick={() => {
-                void handleSubmitSatisfaction()
-              }}
-              isLoading={isSubmittingSatisfaction}
-              disabled={!satisfactionLevel || isSubmittingSatisfaction}
-            />
-          </div>
-        </div>
-      </Modal>
     </>
   )
 }

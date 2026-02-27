@@ -1,6 +1,6 @@
 import styles from "./login.module.css"
-import { useNavigate } from "react-router-dom"
-import { useMemo, useState } from "react"
+import { useNavigate, useLocation } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react"
 import { useReadViewContext } from "../../app/readViewContext"
 import { ROUTES } from "../../app/paths"
 import Button from "../../shared/ui/button/Button"
@@ -15,10 +15,12 @@ import {
   mapUserToReadView,
 } from "../../shared/api/auth"
 import { getStoredTheme } from "../../shared/theme"
+import { consumeCollectiveProofTokenFromUrl } from "../../shared/utils/collectiveProofToken"
 
 const LoginPage = () => {
   const { setData } = useReadViewContext()
   const navigate = useNavigate()
+  const location = useLocation()
   const [user, setUser] = useState<User>({
     cpf: "",
     dtNascimento: "",
@@ -40,6 +42,14 @@ const LoginPage = () => {
     () => (getStoredTheme() === "dark" ? "/logo-branca.png" : "/logo.webp"),
     [],
   )
+
+  useEffect(() => {
+    const consumed = consumeCollectiveProofTokenFromUrl(location.search)
+    if (!consumed) return
+
+    const nextSearch = consumed.cleanedSearch ? `?${consumed.cleanedSearch}` : ""
+    navigate(`${location.pathname}${nextSearch}${location.hash}`, { replace: true })
+  }, [location.hash, location.pathname, location.search, navigate])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
