@@ -15,7 +15,10 @@ import {
   mapUserToReadView,
 } from "../../shared/api/auth"
 import { getStoredTheme } from "../../shared/theme"
-import { consumeCollectiveProofTokenFromUrl } from "../../shared/utils/collectiveProofToken"
+import {
+  consumeCollectiveProofTokenFromUrl,
+  readCollectiveProofTokenFromStorage,
+} from "../../shared/utils/collectiveProofToken"
 
 const LoginPage = () => {
   const { setData } = useReadViewContext()
@@ -115,7 +118,8 @@ const LoginPage = () => {
       setIsLoading(true)
       const result = await loginUser({ cpf, password: user.password })
       setData(mapUserToReadView(result.user))
-      navigate(ROUTES.main)
+      const hasCollectiveProofToken = Boolean(readCollectiveProofTokenFromStorage())
+      navigate(hasCollectiveProofToken ? ROUTES.mainTrainings : ROUTES.main)
     } catch (e) {
       if (e instanceof ApiError) {
         if (e.status === 409 && (e.data as { error?: string })?.error) {
@@ -195,7 +199,8 @@ const LoginPage = () => {
       setIsPasswordModalOpen(false)
       setPasswordForm({ password: "", confirmPassword: "" })
       setUser((prev) => ({ ...prev, password: "" }))
-      navigate(ROUTES.main)
+      const hasCollectiveProofToken = Boolean(readCollectiveProofTokenFromStorage())
+      navigate(hasCollectiveProofToken ? ROUTES.mainTrainings : ROUTES.main)
     } catch (e) {
       if (e instanceof ApiError) {
         setPasswordError(e.message)
