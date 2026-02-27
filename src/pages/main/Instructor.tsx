@@ -832,7 +832,7 @@ const Instructor = () => {
         trilhaTitulo: trilha.trilhaTitulo,
         prova,
       }
-      if (prova.MODO_APLICACAO === "individual") {
+      if (String(prova.MODO_APLICACAO ?? "coletiva").trim().toLowerCase() === "individual") {
         individualSteps.push(nextStep)
       } else {
         collectiveSteps.push(nextStep)
