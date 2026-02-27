@@ -33,6 +33,7 @@ type FacialEnrollmentModalProps = {
   onClose: () => void
   participants: Participant[]
   instructorCpf?: string
+  mode?: "collective" | "individual"
   onCompleted: (captures: FacialCaptureResult[]) => void
 }
 
@@ -64,8 +65,10 @@ const FacialEnrollmentModal = ({
   onClose,
   participants,
   instructorCpf,
+  mode = "collective",
   onCompleted,
 }: FacialEnrollmentModalProps) => {
+  const isIndividualMode = mode === "individual"
   const [modelsLoaded, setModelsLoaded] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
@@ -102,6 +105,11 @@ const FacialEnrollmentModal = ({
     if (!matchParticipantId) return null
     return participantsById.get(matchParticipantId) ?? null
   }, [matchParticipantId, participantsById])
+
+  const selfParticipant = useMemo(() => {
+    if (!isIndividualMode) return null
+    return participants[0] ?? null
+  }, [isIndividualMode, participants])
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -184,7 +192,11 @@ const FacialEnrollmentModal = ({
         setIsSwitchingCamera(true)
         setStatus("Trocando camera...")
         await startCamera(deviceId)
-        setStatus("Camera pronta. Posicione o colaborador e capture.")
+        setStatus(
+          isIndividualMode
+            ? "Camera pronta. Posicione seu rosto e tire a selfie."
+            : "Camera pronta. Posicione o colaborador e capture.",
+        )
       } catch (error) {
         const message = error instanceof Error ? error.message : "Nao foi possivel trocar a camera"
         setStatus(message)
@@ -192,7 +204,7 @@ const FacialEnrollmentModal = ({
         setIsSwitchingCamera(false)
       }
     },
-    [selectedCameraId, startCamera],
+    [isIndividualMode, selectedCameraId, startCamera],
   )
 
   useEffect(() => {
@@ -213,7 +225,11 @@ const FacialEnrollmentModal = ({
         setStatus("Modelos carregados. Iniciando camera...")
         await startCamera()
         if (cancelled) return
-        setStatus("Camera pronta. Posicione o colaborador e capture.")
+        setStatus(
+          isIndividualMode
+            ? "Camera pronta. Posicione seu rosto e tire a selfie."
+            : "Camera pronta. Posicione o colaborador e capture.",
+        )
       } catch (error) {
         if (cancelled) return
         const message = error instanceof Error ? error.message : "Falha ao iniciar coleta facial"
@@ -227,7 +243,7 @@ const FacialEnrollmentModal = ({
       cancelled = true
       stopCamera()
     }
-  }, [open, resetState, startCamera, stopCamera])
+  }, [isIndividualMode, open, resetState, startCamera, stopCamera])
 
   useEffect(() => {
     if (!open) return
@@ -242,6 +258,70 @@ const FacialEnrollmentModal = ({
       navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange)
     }
   }, [loadAvailableCameras, open])
+
+  useEffect(() => {
+    if (!open || !isIndividualMode) return
+    if (!selfParticipant) return
+    setSelectedParticipantId(selfParticipant.id)
+  }, [isIndividualMode, open, selfParticipant])
+
+  const persistCaptureForParticipant = useCallback(async (
+    participantId: string,
+    captureInput?: PendingCapture | null,
+    autoComplete = false,
+  ) => {
+    const participant = participantsById.get(participantId)
+    if (!participant) {
+      setStatus("Colaborador selecionado invalido.")
+      return
+    }
+    const captureToPersist = captureInput ?? pendingCapture
+    if (!captureToPersist) {
+      setStatus("Capture um rosto antes de confirmar.")
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const enrollResponse = await enrollFace({
+        cpf: participant.cpf,
+        descriptor: captureToPersist.descriptor,
+        fotoBase64: captureToPersist.fotoBase64,
+        origem: isIndividualMode ? "prova-individual" : "treinamento-coletivo",
+        criadoPor: instructorCpf,
+        user: participant.raw,
+      })
+
+      const capture: FacialCaptureResult = {
+        participantId: participant.id,
+        cpf: participant.cpf,
+        nome: participant.nome,
+        createdAt: new Date().toISOString(),
+        match: captureToPersist.match,
+        fotoBase64: enrollResponse.face?.FOTO_BASE64 ?? captureToPersist.fotoBase64 ?? null,
+        fotoUrl: enrollResponse.face?.FOTO_URL ?? null,
+      }
+
+      setCapturesMap((current) => ({
+        ...current,
+        [participant.id]: capture,
+      }))
+      setPendingCapture(null)
+      setSelectedParticipantId(isIndividualMode ? participant.id : "")
+      setIsMatchConfirmOpen(false)
+      setMatchParticipantId(null)
+      setStatus(`Facial confirmada para ${participant.nome}.`)
+
+      if (autoComplete) {
+        onCompleted([capture])
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao salvar facial"
+      setStatus(message)
+    } finally {
+      setIsSaving(false)
+    }
+  }, [instructorCpf, isIndividualMode, onCompleted, participantsById, pendingCapture])
 
   const captureDescriptor = useCallback(async () => {
     if (!modelsLoaded || !cameraReady) {
@@ -290,15 +370,47 @@ const FacialEnrollmentModal = ({
       const matchedParticipant = matchedCpf
         ? participants.find((participant) => participant.cpf === matchedCpf)
         : null
+      const captureDraft: PendingCapture = {
+        descriptor,
+        fotoBase64,
+        match: matchResponse.match,
+      }
+
+      if (isIndividualMode) {
+        if (!selfParticipant) {
+          setStatus("Nao foi possivel identificar o colaborador logado.")
+          return
+        }
+
+        if (matchResponse.match && matchResponse.match.cpf !== selfParticipant.cpf) {
+          setPendingCapture(null)
+          setSelectedParticipantId(selfParticipant.id)
+          setMatchParticipantId(null)
+          setIsMatchConfirmOpen(false)
+          setStatus(
+            "A selfie nao corresponde ao CPF logado. Posicione melhor o rosto e tente novamente.",
+          )
+          return
+        }
+
+        setPendingCapture(captureDraft)
+        setSelectedParticipantId(selfParticipant.id)
+        if (matchResponse.match?.cpf === selfParticipant.cpf) {
+          setMatchParticipantId(selfParticipant.id)
+          setIsMatchConfirmOpen(true)
+          setStatus("Facial existente encontrada. Confirme seus dados para continuar.")
+          return
+        }
+
+        setStatus("Selfie capturada. Salvando facial...")
+        await persistCaptureForParticipant(selfParticipant.id, captureDraft, true)
+        return
+      }
 
       const defaultParticipantId =
         matchedParticipant?.id ?? pendingParticipants[0]?.id ?? participants[0]?.id ?? ""
 
-      setPendingCapture({
-        descriptor,
-        fotoBase64,
-        match: matchResponse.match,
-      })
+      setPendingCapture(captureDraft)
       setSelectedParticipantId(defaultParticipantId)
 
       if (matchResponse.match) {
@@ -318,56 +430,15 @@ const FacialEnrollmentModal = ({
     } finally {
       setIsCapturing(false)
     }
-  }, [cameraReady, modelsLoaded, participants, pendingParticipants])
-
-  const persistCaptureForParticipant = useCallback(async (participantId: string) => {
-    const participant = participantsById.get(participantId)
-    if (!participant) {
-      setStatus("Colaborador selecionado invalido.")
-      return
-    }
-    if (!pendingCapture) {
-      setStatus("Capture um rosto antes de confirmar.")
-      return
-    }
-
-    setIsSaving(true)
-    try {
-      const enrollResponse = await enrollFace({
-        cpf: participant.cpf,
-        descriptor: pendingCapture.descriptor,
-        fotoBase64: pendingCapture.fotoBase64,
-        origem: "treinamento-coletivo",
-        criadoPor: instructorCpf,
-        user: participant.raw,
-      })
-
-      const capture: FacialCaptureResult = {
-        participantId: participant.id,
-        cpf: participant.cpf,
-        nome: participant.nome,
-        createdAt: new Date().toISOString(),
-        match: pendingCapture.match,
-        fotoBase64: enrollResponse.face?.FOTO_BASE64 ?? pendingCapture.fotoBase64 ?? null,
-        fotoUrl: enrollResponse.face?.FOTO_URL ?? null,
-      }
-
-      setCapturesMap((current) => ({
-        ...current,
-        [participant.id]: capture,
-      }))
-      setPendingCapture(null)
-      setSelectedParticipantId("")
-      setIsMatchConfirmOpen(false)
-      setMatchParticipantId(null)
-      setStatus(`Facial confirmada para ${participant.nome}.`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Falha ao salvar facial"
-      setStatus(message)
-    } finally {
-      setIsSaving(false)
-    }
-  }, [pendingCapture, participantsById, instructorCpf])
+  }, [
+    cameraReady,
+    isIndividualMode,
+    modelsLoaded,
+    participants,
+    pendingParticipants,
+    persistCaptureForParticipant,
+    selfParticipant,
+  ])
 
   const confirmCapture = useCallback(() => {
     if (!pendingCapture) {
@@ -384,17 +455,27 @@ const FacialEnrollmentModal = ({
   const handleConfirmMatched = useCallback(() => {
     if (!matchParticipantId) {
       setIsMatchConfirmOpen(false)
-      setStatus("Rosto encontrado fora da lista selecionada. Vincule manualmente.")
+      setStatus(
+        isIndividualMode
+          ? "Nao foi possivel confirmar sua identidade. Tire uma nova selfie."
+          : "Rosto encontrado fora da lista selecionada. Vincule manualmente.",
+      )
       return
     }
     setSelectedParticipantId(matchParticipantId)
-    void persistCaptureForParticipant(matchParticipantId)
-  }, [matchParticipantId, persistCaptureForParticipant])
+    void persistCaptureForParticipant(matchParticipantId, undefined, isIndividualMode)
+  }, [isIndividualMode, matchParticipantId, persistCaptureForParticipant])
 
   const handleMatchManual = useCallback(() => {
     setIsMatchConfirmOpen(false)
+    if (isIndividualMode) {
+      setPendingCapture(null)
+      setMatchParticipantId(null)
+      setStatus("Tire uma nova selfie para continuar.")
+      return
+    }
     setStatus("Confirme manualmente o colaborador correspondente.")
-  }, [])
+  }, [isIndividualMode])
 
   const matchedRole =
     matchedParticipant?.raw?.NOME_FUNCAO ??
@@ -419,13 +500,19 @@ const FacialEnrollmentModal = ({
 
   return (
     <>
-      <Modal open={open} onClose={onClose} size="full" title="Validacao Facial do Treinamento">
-        <div className={styles.layout}>
-          <div className={styles.cameraPanel}>
-            <div className={styles.cameraHeader}>
-              <h4>Captura</h4>
-              <span>{cameraReady ? "Camera ativa" : "Camera inativa"}</span>
-            </div>
+      <Modal
+        open={open}
+        onClose={onClose}
+        size="full"
+        className={isIndividualMode ? styles.individualModal : undefined}
+        title={isIndividualMode ? "Registro Facial" : "Validacao Facial do Treinamento"}
+      >
+        {isIndividualMode ? (
+          <div className={styles.individualLayout}>
+            <p className={styles.individualHint}>
+              Tire uma selfie para confirmar sua identidade e concluir a prova individual.
+            </p>
+
             <div className={styles.cameraSwitchRow}>
               <label htmlFor="camera-select" className={styles.cameraSwitchLabel}>
                 Camera
@@ -450,137 +537,241 @@ const FacialEnrollmentModal = ({
                 )}
               </select>
             </div>
-            <div className={styles.videoWrapper}>
+
+            <div className={styles.individualVideoWrapper}>
               <video ref={videoRef} className={styles.video} autoPlay muted playsInline />
               {!cameraReady ? <div className={styles.overlay}>Inicializando camera...</div> : null}
             </div>
+
             <canvas ref={canvasRef} className={styles.hiddenCanvas} />
-            <div className={styles.captureActions}>
-              <Button
-                text="Capturar Rosto"
-                onClick={captureDescriptor}
-                isLoading={isCapturing}
-                disabled={!cameraReady || isSaving}
-              />
-              <Button
-                text="Confirmar Facial"
-                variant="secondary"
-                onClick={confirmCapture}
-                isLoading={isSaving}
-                disabled={!pendingCapture || !selectedParticipantId}
-              />
-            </div>
+
             {pendingCapture ? (
               <div className={styles.pendingPanel}>
                 <div className={styles.pendingPreview}>
-                  <img src={pendingCapture.fotoBase64} alt="Pre-visualizacao da captura facial" />
+                  <img src={pendingCapture.fotoBase64} alt="Pre-visualizacao da selfie" />
                 </div>
-                <label className={styles.pendingLabel} htmlFor="face-participant">
-                  Colaborador correspondente
-                </label>
-                <select
-                  id="face-participant"
-                  className={styles.pendingSelect}
-                  value={selectedParticipantId}
-                  onChange={(event) => setSelectedParticipantId(event.target.value)}
-                >
-                  <option value="">Selecione um colaborador</option>
-                  {participants.map((participant) => (
-                    <option key={participant.id} value={participant.id}>
-                      {participant.nome} - {participant.cpf}
-                    </option>
-                  ))}
-                </select>
-                {pendingCapture.match ? (
-                  <p className={styles.matchHint}>
-                    Sugestao automatica: {pendingCapture.match.nome ?? pendingCapture.match.cpf} (
-                    {pendingCapture.match.cpf})
-                  </p>
-                ) : (
-                  <p className={styles.matchHint}>Sem correspondencia automatica.</p>
-                )}
               </div>
             ) : null}
-            <p className={styles.status}>{status}</p>
-          </div>
 
-          <div className={styles.listPanel}>
-            <div className={styles.listHeader}>
-              <h4>Colaboradores selecionados</h4>
-              <span>
-                {Object.keys(capturesMap).length}/{participants.length} validados
-              </span>
-            </div>
-            <ul className={styles.participantList}>
-              {participants.map((participant) => {
-                const capture = capturesMap[participant.id]
-                return (
-                  <li key={participant.id} className={styles.participantItem}>
-                    <div>
-                      <strong>{participant.nome}</strong>
-                      <small>{participant.cpf}</small>
-                    </div>
-                    <span className={capture ? styles.tagDone : styles.tagPending}>
-                      {capture ? "Validado" : "Pendente"}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-            <div className={styles.finishActions}>
-              <Button text="Fechar" variant="ghost" onClick={onClose} />
-              <Button text="Finalizar Coleta Facial" onClick={handleComplete} disabled={!allCaptured} />
+            <p className={styles.status}>{status}</p>
+            <div className={styles.captureActions}>
+              <Button
+                text="Capturar selfie"
+                onClick={captureDescriptor}
+                isLoading={isCapturing || isSaving}
+                disabled={!cameraReady || isSaving}
+              />
+              <Button text="Cancelar" variant="ghost" onClick={onClose} disabled={isSaving} />
             </div>
           </div>
-        </div>
+        ) : (
+          <div className={styles.layout}>
+            <div className={styles.cameraPanel}>
+              <div className={styles.cameraHeader}>
+                <h4>Captura</h4>
+                <span>{cameraReady ? "Camera ativa" : "Camera inativa"}</span>
+              </div>
+              <div className={styles.cameraSwitchRow}>
+                <label htmlFor="camera-select" className={styles.cameraSwitchLabel}>
+                  Camera
+                </label>
+                <select
+                  id="camera-select"
+                  className={styles.cameraSelect}
+                  value={selectedCameraId}
+                  onChange={(event) => {
+                    void switchCamera(event.target.value)
+                  }}
+                  disabled={!cameraReady || availableCameras.length <= 1 || isSwitchingCamera}
+                >
+                  {availableCameras.length === 0 ? (
+                    <option value="">Nenhuma camera encontrada</option>
+                  ) : (
+                    availableCameras.map((camera, index) => (
+                      <option key={camera.deviceId} value={camera.deviceId}>
+                        {camera.label || `Camera ${index + 1}`}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+              <div className={styles.videoWrapper}>
+                <video ref={videoRef} className={styles.video} autoPlay muted playsInline />
+                {!cameraReady ? <div className={styles.overlay}>Inicializando camera...</div> : null}
+              </div>
+              <canvas ref={canvasRef} className={styles.hiddenCanvas} />
+              <div className={styles.captureActions}>
+                <Button
+                  text="Capturar Rosto"
+                  onClick={captureDescriptor}
+                  isLoading={isCapturing}
+                  disabled={!cameraReady || isSaving}
+                />
+                <Button
+                  text="Confirmar Facial"
+                  variant="secondary"
+                  onClick={confirmCapture}
+                  isLoading={isSaving}
+                  disabled={!pendingCapture || !selectedParticipantId}
+                />
+              </div>
+              {pendingCapture ? (
+                <div className={styles.pendingPanel}>
+                  <div className={styles.pendingPreview}>
+                    <img src={pendingCapture.fotoBase64} alt="Pre-visualizacao da captura facial" />
+                  </div>
+                  <label className={styles.pendingLabel} htmlFor="face-participant">
+                    Colaborador correspondente
+                  </label>
+                  <select
+                    id="face-participant"
+                    className={styles.pendingSelect}
+                    value={selectedParticipantId}
+                    onChange={(event) => setSelectedParticipantId(event.target.value)}
+                  >
+                    <option value="">Selecione um colaborador</option>
+                    {participants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.nome} - {participant.cpf}
+                      </option>
+                    ))}
+                  </select>
+                  {pendingCapture.match ? (
+                    <p className={styles.matchHint}>
+                      Sugestao automatica: {pendingCapture.match.nome ?? pendingCapture.match.cpf} (
+                      {pendingCapture.match.cpf})
+                    </p>
+                  ) : (
+                    <p className={styles.matchHint}>Sem correspondencia automatica.</p>
+                  )}
+                </div>
+              ) : null}
+              <p className={styles.status}>{status}</p>
+            </div>
+
+            <div className={styles.listPanel}>
+              <div className={styles.listHeader}>
+                <h4>Colaboradores selecionados</h4>
+                <span>
+                  {Object.keys(capturesMap).length}/{participants.length} validados
+                </span>
+              </div>
+              <ul className={styles.participantList}>
+                {participants.map((participant) => {
+                  const capture = capturesMap[participant.id]
+                  return (
+                    <li key={participant.id} className={styles.participantItem}>
+                      <div>
+                        <strong>{participant.nome}</strong>
+                        <small>{participant.cpf}</small>
+                      </div>
+                      <span className={capture ? styles.tagDone : styles.tagPending}>
+                        {capture ? "Validado" : "Pendente"}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+              <div className={styles.finishActions}>
+                <Button text="Fechar" variant="ghost" onClick={onClose} />
+                <Button text="Finalizar Coleta Facial" onClick={handleComplete} disabled={!allCaptured} />
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal
         open={isMatchConfirmOpen}
         onClose={handleMatchManual}
         size="md"
-        title="Confirmar Colaborador Identificado"
+        title={isIndividualMode ? "Confirmar seus dados" : "Confirmar Colaborador Identificado"}
       >
         <div className={styles.matchModalBody}>
-          <p className={styles.matchModalText}>
-            Rosto encontrado na base. Confirme os dados antes de vincular.
-          </p>
-
-          <div className={styles.matchBlock}>
-            <h5 className={styles.matchBlockTitle}>Face reconhecida</h5>
-            <div className={styles.matchGrid}>
-              <span><strong>Nome:</strong> {matchedCandidate?.nome ?? "-"}</span>
-              <span><strong>CPF:</strong> {matchedCandidate?.cpf ?? "-"}</span>
-              <span><strong>Confianca:</strong> {matchedCandidate ? `${(matchedCandidate.confidence * 100).toFixed(1)}%` : "-"}</span>
-              <span><strong>Distancia:</strong> {matchedCandidate ? matchedCandidate.distance.toFixed(4) : "-"}</span>
-            </div>
-          </div>
-
-          <div className={styles.matchBlock}>
-            <h5 className={styles.matchBlockTitle}>Colaborador da turma</h5>
-            {matchedParticipant ? (
-              <div className={styles.matchGrid}>
-                <span><strong>Nome:</strong> {matchedParticipant.nome}</span>
-                <span><strong>CPF:</strong> {matchedParticipant.cpf}</span>
-                <span><strong>Funcao:</strong> {matchedRole}</span>
-                <span><strong>Departamento:</strong> {matchedDepartment}</span>
-              </div>
-            ) : (
-              <p className={styles.matchWarning}>
-                O CPF identificado nao esta na lista selecionada para este treinamento.
+          {isIndividualMode ? (
+            <>
+              <p className={styles.matchModalText}>
+                Encontramos uma facial ja cadastrada para este CPF. Confirme seus dados para
+                continuar.
               </p>
-            )}
-          </div>
 
-          <div className={styles.matchModalActions}>
-            <Button text="Selecionar Manualmente" variant="ghost" onClick={handleMatchManual} />
-            <Button
-              text="Confirmar e Salvar"
-              onClick={handleConfirmMatched}
-              disabled={!matchedParticipant}
-              isLoading={isSaving}
-            />
-          </div>
+              <div className={styles.matchBlock}>
+                <h5 className={styles.matchBlockTitle}>Dados do colaborador</h5>
+                {matchedParticipant ? (
+                  <div className={styles.matchGrid}>
+                    <span><strong>Nome:</strong> {matchedParticipant.nome}</span>
+                    <span><strong>CPF:</strong> {matchedParticipant.cpf}</span>
+                    <span><strong>Funcao:</strong> {matchedRole}</span>
+                    <span><strong>Departamento:</strong> {matchedDepartment}</span>
+                  </div>
+                ) : (
+                  <p className={styles.matchWarning}>
+                    Nao foi possivel validar os dados deste CPF. Tire uma nova selfie.
+                  </p>
+                )}
+              </div>
+
+              <div className={styles.matchBlock}>
+                <h5 className={styles.matchBlockTitle}>Correspondencia da selfie</h5>
+                <div className={styles.matchGrid}>
+                  <span><strong>Confianca:</strong> {matchedCandidate ? `${(matchedCandidate.confidence * 100).toFixed(1)}%` : "-"}</span>
+                  <span><strong>Distancia:</strong> {matchedCandidate ? matchedCandidate.distance.toFixed(4) : "-"}</span>
+                </div>
+              </div>
+
+              <div className={styles.matchModalActions}>
+                <Button text="Tirar nova selfie" variant="ghost" onClick={handleMatchManual} />
+                <Button
+                  text="Confirmar e Continuar"
+                  onClick={handleConfirmMatched}
+                  disabled={!matchedParticipant}
+                  isLoading={isSaving}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <p className={styles.matchModalText}>
+                Rosto encontrado na base. Confirme os dados antes de vincular.
+              </p>
+
+              <div className={styles.matchBlock}>
+                <h5 className={styles.matchBlockTitle}>Face reconhecida</h5>
+                <div className={styles.matchGrid}>
+                  <span><strong>Nome:</strong> {matchedCandidate?.nome ?? "-"}</span>
+                  <span><strong>CPF:</strong> {matchedCandidate?.cpf ?? "-"}</span>
+                  <span><strong>Confianca:</strong> {matchedCandidate ? `${(matchedCandidate.confidence * 100).toFixed(1)}%` : "-"}</span>
+                  <span><strong>Distancia:</strong> {matchedCandidate ? matchedCandidate.distance.toFixed(4) : "-"}</span>
+                </div>
+              </div>
+
+              <div className={styles.matchBlock}>
+                <h5 className={styles.matchBlockTitle}>Colaborador da turma</h5>
+                {matchedParticipant ? (
+                  <div className={styles.matchGrid}>
+                    <span><strong>Nome:</strong> {matchedParticipant.nome}</span>
+                    <span><strong>CPF:</strong> {matchedParticipant.cpf}</span>
+                    <span><strong>Funcao:</strong> {matchedRole}</span>
+                    <span><strong>Departamento:</strong> {matchedDepartment}</span>
+                  </div>
+                ) : (
+                  <p className={styles.matchWarning}>
+                    O CPF identificado nao esta na lista selecionada para este treinamento.
+                  </p>
+                )}
+              </div>
+
+              <div className={styles.matchModalActions}>
+                <Button text="Selecionar Manualmente" variant="ghost" onClick={handleMatchManual} />
+                <Button
+                  text="Confirmar e Salvar"
+                  onClick={handleConfirmMatched}
+                  disabled={!matchedParticipant}
+                  isLoading={isSaving}
+                />
+              </div>
+            </>
+          )}
         </div>
       </Modal>
     </>

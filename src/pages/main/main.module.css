@@ -222,6 +222,10 @@
     height: 100%;
 }
 
+.trainingModalBodyIndividual {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .trainingPlayerPanel {
     background: var(--surface-muted-bg);
     border: 1px solid var(--border-color);
@@ -1617,6 +1621,11 @@
 
     .trainingModalBody {
         grid-template-columns: 1fr;
+    }
+
+    .trainingModalBodyIndividual .trainingPlayerPanel {
+        min-height: calc(100vh - 220px);
+        justify-content: flex-start;
     }
 
     .trainingQueueList {

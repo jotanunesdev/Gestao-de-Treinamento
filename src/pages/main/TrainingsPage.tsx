@@ -1253,6 +1253,7 @@ const TrainingsPage = () => {
           saveCollectiveProofToken(null)
           setCollectiveProofToken(null)
           setTokenProofContext(null)
+          closeTrilhaPlayer()
         } else {
           setTokenProofContext((prev) =>
             prev
@@ -1278,6 +1279,7 @@ const TrainingsPage = () => {
     collectiveProofToken,
     cpf,
     efficacyLevel,
+    closeTrilhaPlayer,
     pendingEfficacyFinalMessage,
     tokenProofContext?.provas,
     tokenProofsByTrilha,
@@ -1378,7 +1380,11 @@ const TrainingsPage = () => {
             </div>
           </div>
 
-          <div className={styles.trainingModalBody}>
+          <div
+            className={`${styles.trainingModalBody} ${
+              isActiveTokenProofFlow ? styles.trainingModalBodyIndividual : ""
+            }`}
+          >
             <div className={styles.trainingPlayerPanel}>
               <div className={styles.trainingPlayerHeader}>
                 <span className={styles.trainingPlayerTitle}>
@@ -1562,92 +1568,94 @@ const TrainingsPage = () => {
               ) : null}
             </div>
 
-            <div className={styles.trainingQueuePanel}>
-              <div className={styles.trainingQueueHeader}>
-                <h4>{isObjectivePhase ? "Resumo da trilha" : "Proximos videos"}</h4>
-                <span className={styles.trainingQueueCount}>{activeQueue.length}</span>
-              </div>
+            {!isActiveTokenProofFlow ? (
+              <div className={styles.trainingQueuePanel}>
+                <div className={styles.trainingQueueHeader}>
+                  <h4>{isObjectivePhase ? "Resumo da trilha" : "Proximos videos"}</h4>
+                  <span className={styles.trainingQueueCount}>{activeQueue.length}</span>
+                </div>
 
-              <ul className={styles.trainingQueueList}>
-                {activeQueue.map((video, index) => {
-                  const key = buildCompletionKey(video.ID, video.VERSAO)
-                  const isDone = Boolean(completedByKey[key])
-                  const isActive = currentVideo?.ID === video.ID
-                  return (
-                    <li
-                      key={`${video.ID}-${video.VERSAO ?? index}`}
-                      className={`${styles.trainingQueueItem} ${isActive ? styles.trainingQueueActive : ""}`}
-                    >
-                      <button
-                        type="button"
-                        className={styles.trainingQueueButton}
-                        disabled={isObjectivePhase}
-                        onClick={() => {
-                          setCurrentVideoId(video.ID)
-                          setCurrentPdfId(null)
-                          setPlayerMessage(null)
-                          setIsObjectivePhase(false)
-                        }}
+                <ul className={styles.trainingQueueList}>
+                  {activeQueue.map((video, index) => {
+                    const key = buildCompletionKey(video.ID, video.VERSAO)
+                    const isDone = Boolean(completedByKey[key])
+                    const isActive = currentVideo?.ID === video.ID
+                    return (
+                      <li
+                        key={`${video.ID}-${video.VERSAO ?? index}`}
+                        className={`${styles.trainingQueueItem} ${isActive ? styles.trainingQueueActive : ""}`}
                       >
-                        <div className={styles.trainingQueueInfo}>
-                          <span className={`${styles.trainingQueueTypeBadge} ${isDone ? styles.trainingQueueTypeDone : styles.trainingQueueTypeVideo}`}>
-                            {isDone ? "Concluido" : "Pendente"}
-                          </span>
-                          <span className={styles.trainingQueueTitle}>
-                            {resolveVideoTitle(video.PATH_VIDEO)}
-                          </span>
-                          <span className={styles.trainingQueueMeta}>
-                            {isDone
-                              ? `Concluido em ${formatDateTime(completedByKey[key])}`
-                              : `Ordem ${video.ORDEM ?? index + 1}`}
-                          </span>
-                        </div>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-              {activeTrilhaPdfs.length > 0 ? (
-                <div className={styles.trainingPdfListSection}>
-                  <h5 className={styles.trainingPdfListTitle}>PDFs da trilha</h5>
-                  <ul className={styles.trainingPdfList}>
-                    {activeTrilhaPdfs.map((pdf) => {
-                      const isActive = currentPdf?.ID === pdf.ID
-                      return (
-                        <li key={`${pdf.ID}-${pdf.VERSAO}`}>
-                          <button
-                            type="button"
-                            className={`${styles.trainingPdfButton} ${
-                              isActive ? styles.trainingPdfButtonActive : ""
-                            }`}
-                            onClick={() => {
-                              setCurrentPdfId(pdf.ID)
-                              setIsObjectivePhase(false)
-                              setPlayerMessage(null)
-                            }}
-                          >
-                            <span className={styles.trainingQueueTypeBadge}>PDF</span>
-                            <span className={styles.trainingPdfName}>
-                              {resolvePdfTitle(pdf.PDF_PATH)}
+                        <button
+                          type="button"
+                          className={styles.trainingQueueButton}
+                          disabled={isObjectivePhase}
+                          onClick={() => {
+                            setCurrentVideoId(video.ID)
+                            setCurrentPdfId(null)
+                            setPlayerMessage(null)
+                            setIsObjectivePhase(false)
+                          }}
+                        >
+                          <div className={styles.trainingQueueInfo}>
+                            <span className={`${styles.trainingQueueTypeBadge} ${isDone ? styles.trainingQueueTypeDone : styles.trainingQueueTypeVideo}`}>
+                              {isDone ? "Concluido" : "Pendente"}
                             </span>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </div>
-              ) : null}
-              {isObjectivePhase && objectiveProva ? (
-                <div className={styles.trainingQueueObjectiveStatus}>
-                  <span className={styles.trainingQueueTypeBadge}>Prova Final</span>
-                  <span className={styles.trainingQueueMeta}>
-                    {objectiveResult
-                      ? `Status: ${objectiveResult.aprovado ? "Aprovado" : "Reprovado"}`
-                      : "Aguardando envio da prova"}
-                  </span>
-                </div>
-              ) : null}
-            </div>
+                            <span className={styles.trainingQueueTitle}>
+                              {resolveVideoTitle(video.PATH_VIDEO)}
+                            </span>
+                            <span className={styles.trainingQueueMeta}>
+                              {isDone
+                                ? `Concluido em ${formatDateTime(completedByKey[key])}`
+                                : `Ordem ${video.ORDEM ?? index + 1}`}
+                            </span>
+                          </div>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {activeTrilhaPdfs.length > 0 ? (
+                  <div className={styles.trainingPdfListSection}>
+                    <h5 className={styles.trainingPdfListTitle}>PDFs da trilha</h5>
+                    <ul className={styles.trainingPdfList}>
+                      {activeTrilhaPdfs.map((pdf) => {
+                        const isActive = currentPdf?.ID === pdf.ID
+                        return (
+                          <li key={`${pdf.ID}-${pdf.VERSAO}`}>
+                            <button
+                              type="button"
+                              className={`${styles.trainingPdfButton} ${
+                                isActive ? styles.trainingPdfButtonActive : ""
+                              }`}
+                              onClick={() => {
+                                setCurrentPdfId(pdf.ID)
+                                setIsObjectivePhase(false)
+                                setPlayerMessage(null)
+                              }}
+                            >
+                              <span className={styles.trainingQueueTypeBadge}>PDF</span>
+                              <span className={styles.trainingPdfName}>
+                                {resolvePdfTitle(pdf.PDF_PATH)}
+                              </span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
+                {isObjectivePhase && objectiveProva ? (
+                  <div className={styles.trainingQueueObjectiveStatus}>
+                    <span className={styles.trainingQueueTypeBadge}>Prova Final</span>
+                    <span className={styles.trainingQueueMeta}>
+                      {objectiveResult
+                        ? `Status: ${objectiveResult.aprovado ? "Aprovado" : "Reprovado"}`
+                        : "Aguardando envio da prova"}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </Modal>
@@ -1748,6 +1756,7 @@ const TrainingsPage = () => {
         }}
         participants={selfFaceParticipants}
         instructorCpf={cpf}
+        mode="individual"
         onCompleted={(captures) => {
           void handleFaceCompleted(captures)
         }}
