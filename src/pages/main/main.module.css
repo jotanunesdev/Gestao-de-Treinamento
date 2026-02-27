@@ -1548,7 +1548,7 @@
     .asideSlot {
         grid-column: 1;
         grid-row: 1;
-        z-index: 120;
+        z-index: 200 !important;
     }
 
     .asideMobileClosed {
@@ -1572,7 +1572,7 @@
         border: 1px solid var(--border-color);
         background: var(--surface-bg);
         color: var(--surface-text);
-        z-index: 140;
+        z-index: 220;
         align-items: center;
         justify-content: center;
         font-size: 1rem;
@@ -1583,7 +1583,7 @@
         display: block;
         position: fixed;
         inset: 0;
-        z-index: 110;
+        z-index: 150;
         border: none;
         background: rgba(15, 23, 42, 0.4);
         cursor: pointer;
