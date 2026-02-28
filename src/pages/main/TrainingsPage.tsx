@@ -817,11 +817,19 @@ const TrainingsPage = () => {
   }
 
   const openTrilhaEfficacyModal = useCallback((finalMessage: string) => {
+    const activeTrilhaIdValue = activeTrilhaId ?? ""
+    const isTokenFlow =
+      Boolean(collectiveProofToken) &&
+      Boolean(activeTrilhaIdValue) &&
+      tokenProofsByTrilha.has(activeTrilhaIdValue)
     const activeTrilha = trilhas.find((item) => item.ID === activeTrilhaId)
     const required =
+      isTokenFlow ||
       activeTrilha?.AVALIACAO_EFICACIA_OBRIGATORIA === true ||
       Number(activeTrilha?.AVALIACAO_EFICACIA_OBRIGATORIA ?? 0) === 1
-    const hasQuestion = String(activeTrilha?.AVALIACAO_EFICACIA_PERGUNTA ?? "").trim().length > 0
+    const hasQuestion =
+      isTokenFlow ||
+      String(activeTrilha?.AVALIACAO_EFICACIA_PERGUNTA ?? "").trim().length > 0
     if (!(required && hasQuestion)) {
       setPendingEfficacyFinalMessage(null)
       setEfficacyLevel(null)
@@ -834,7 +842,7 @@ const TrainingsPage = () => {
     setEfficacyLevel(null)
     setEfficacyError(null)
     setIsEfficacyModalOpen(true)
-  }, [activeTrilhaId, trilhas])
+  }, [activeTrilhaId, collectiveProofToken, tokenProofsByTrilha, trilhas])
 
   const currentVideo = useMemo(() => {
     if (!currentVideoId) return null
@@ -1253,6 +1261,8 @@ const TrainingsPage = () => {
           saveCollectiveProofToken(null)
           setCollectiveProofToken(null)
           setTokenProofContext(null)
+          setIsFaceModalOpen(false)
+          setIsSatisfactionModalOpen(false)
           closeTrilhaPlayer()
         } else {
           setTokenProofContext((prev) =>
@@ -1368,6 +1378,11 @@ const TrainingsPage = () => {
         open={isPlayerModalOpen}
         onClose={closeTrilhaPlayer}
         size="full"
+        className={isActiveTokenProofFlow ? styles.trainingPlayerModalIndividual : undefined}
+        backdropClassName={isActiveTokenProofFlow ? styles.trainingPlayerBackdropIndividual : undefined}
+        bodyClassName={isActiveTokenProofFlow ? styles.trainingPlayerModalBodyIndividual : undefined}
+        hideHeader={isActiveTokenProofFlow}
+        closeOnBackdrop={!isActiveTokenProofFlow}
         title={activeTrilhaTitle || "Trilha"}
       >
         <div className={styles.trainingModal}>
@@ -1378,6 +1393,9 @@ const TrainingsPage = () => {
                 {completedInQueue}/{activeQueue.length} videos concluidos
               </p>
             </div>
+            {isActiveTokenProofFlow ? (
+              <Button text="Fechar" variant="ghost" size="sm" onClick={closeTrilhaPlayer} />
+            ) : null}
           </div>
 
           <div

@@ -505,7 +505,12 @@ const FacialEnrollmentModal = ({
         onClose={onClose}
         size="full"
         className={isIndividualMode ? styles.individualModal : undefined}
+        backdropClassName={isIndividualMode ? styles.individualBackdrop : undefined}
+        bodyClassName={isIndividualMode ? styles.individualModalBody : undefined}
         title={isIndividualMode ? "Registro Facial" : "Validacao Facial do Treinamento"}
+        hideHeader={isIndividualMode}
+        showClose={!isIndividualMode}
+        closeOnBackdrop={!isIndividualMode}
       >
         {isIndividualMode ? (
           <div className={styles.individualLayout}>

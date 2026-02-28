@@ -226,6 +226,23 @@
     grid-template-columns: minmax(0, 1fr);
 }
 
+.trainingPlayerBackdropIndividual {
+    padding: 0;
+    background: rgba(15, 23, 42, 0.9);
+}
+
+.trainingPlayerModalIndividual {
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+}
+
+.trainingPlayerModalBodyIndividual {
+    padding: 0;
+    overflow: hidden;
+}
+
 .trainingPlayerPanel {
     background: var(--surface-muted-bg);
     border: 1px solid var(--border-color);
@@ -1624,8 +1641,47 @@
     }
 
     .trainingModalBodyIndividual .trainingPlayerPanel {
-        min-height: calc(100vh - 220px);
+        min-height: 100dvh;
         justify-content: flex-start;
+        border-radius: 0;
+        border: none;
+        padding: calc(env(safe-area-inset-top, 0px) + 0.9rem) 0.9rem
+            calc(env(safe-area-inset-bottom, 0px) + 0.9rem);
+    }
+
+    .trainingModalBodyIndividual .trainingPlayerHeader {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        padding-bottom: 0.35rem;
+        background: var(--surface-muted-bg);
+    }
+
+    .trainingPlayerBackdropIndividual {
+        background: var(--page-bg, var(--body-bg, #cfd8e6));
+        align-items: stretch;
+        justify-content: stretch;
+    }
+
+    .trainingPlayerModalIndividual {
+        border: none;
+        box-shadow: none;
+    }
+
+    .trainingPlayerModalBodyIndividual {
+        padding: 0;
+    }
+
+    .trainingModalBodyIndividual .trainingProvaArea {
+        padding-bottom: 5.2rem;
+    }
+
+    .trainingModalBodyIndividual .trainingProvaActions {
+        position: sticky;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 0.25rem);
+        background: var(--surface-muted-bg);
+        padding-top: 0.55rem;
+        z-index: 4;
     }
 
     .trainingQueueList {
