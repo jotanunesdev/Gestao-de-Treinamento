@@ -24,6 +24,7 @@ export type VideoItem = {
   ID: string
   TRILHA_FK_ID: string
   PATH_VIDEO: string | null
+  TIPO_CONTEUDO?: "video" | "pdf"
   PROCEDIMENTO_ID?: string | null
   NORMA_ID?: string | null
   PROCEDIMENTO_OBSERVACOES?: string | null

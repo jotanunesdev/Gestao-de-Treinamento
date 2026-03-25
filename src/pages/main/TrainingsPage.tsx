@@ -40,6 +40,10 @@ import {
   upsertLastWatchedProgress,
 } from "../../shared/utils/learningProgress"
 import {
+  resolveTrainingMaterialBadgeLabel,
+  resolveTrainingMaterialDisplayKind,
+} from "../../shared/utils/trainingMaterialDisplay"
+import {
   TRAINING_EFFICACY_OPTIONS,
   TRAINING_EFFICACY_QUESTION,
 } from "../../shared/constants/trainingEfficacy"
@@ -203,12 +207,14 @@ const resolveVideoTitle = (pathVideo: string | null) => {
   return noExt.replace(/[-_]+/g, " ").trim() || "Video"
 }
 
-const resolvePdfTitle = (pathPdf: string | null) => {
-  if (!pathPdf) return "PDF"
-  const name = pathPdf.split("/").pop() ?? ""
+const resolveDocumentTitle = (pathValue: string | null, fallback = "Arquivo") => {
+  if (!pathValue) return fallback
+  const name = pathValue.split("/").pop() ?? ""
   const noExt = name.replace(/\.[^/.]+$/, "")
-  return noExt.replace(/[-_]+/g, " ").trim() || "PDF"
+  return noExt.replace(/[-_]+/g, " ").trim() || fallback
 }
+
+const resolvePdfTitle = (pathPdf: string | null) => resolveDocumentTitle(pathPdf, "PDF")
 
 type YouTubePlayer = {
   destroy: () => void
@@ -724,8 +730,16 @@ const TrainingsPage = () => {
     () => {
       const cards = trilhas.map((trilha) => ({
         trilha,
-        videoCount: (videosByTrilha.get(trilha.ID) ?? []).length,
-        pdfCount: (pdfsByTrilha.get(trilha.ID) ?? []).length,
+        videoCount: (videosByTrilha.get(trilha.ID) ?? []).filter(
+          (video) =>
+            resolveTrainingMaterialDisplayKind(video.PATH_VIDEO, video.TIPO_CONTEUDO) === "video",
+        ).length,
+        documentCount:
+          (videosByTrilha.get(trilha.ID) ?? []).filter(
+            (video) =>
+              resolveTrainingMaterialDisplayKind(video.PATH_VIDEO, video.TIPO_CONTEUDO) !==
+              "video",
+          ).length + (pdfsByTrilha.get(trilha.ID) ?? []).length,
         tokenProof: tokenProofsByTrilha.get(trilha.ID) ?? null,
       }))
 
@@ -741,7 +755,7 @@ const TrainingsPage = () => {
             TITULO: `Prova Individual - ${tokenProof.provaTitulo}`,
           },
           videoCount: 0,
-          pdfCount: 0,
+          documentCount: 0,
           tokenProof,
         })
       }
@@ -903,6 +917,17 @@ const TrainingsPage = () => {
     if (!currentVideoId) return null
     return activeQueue.find((item) => item.ID === currentVideoId) ?? null
   }, [activeQueue, currentVideoId])
+
+  const currentVideoDisplayKind = useMemo(
+    () =>
+      resolveTrainingMaterialDisplayKind(currentVideo?.PATH_VIDEO, currentVideo?.TIPO_CONTEUDO),
+    [currentVideo],
+  )
+
+  const currentVideoBadgeLabel = useMemo(
+    () => resolveTrainingMaterialBadgeLabel(currentVideo?.PATH_VIDEO, currentVideo?.TIPO_CONTEUDO),
+    [currentVideo],
+  )
 
   const activeTrilhaPdfs = useMemo(() => {
     if (!activeTrilhaId) return []
@@ -1522,18 +1547,26 @@ const TrainingsPage = () => {
 
           {!isLoading && !error && trilhaCards.length > 0 ? (
             <div className={styles.trainingCardsGrid}>
-              {trilhaCards.map(({ trilha, videoCount, pdfCount, tokenProof }) => (
+              {trilhaCards.map(({ trilha, videoCount, documentCount, tokenProof }) => (
                 <article key={trilha.ID} className={styles.trainingTrilhaCard}>
                   <h4 className={styles.trainingBlockTitle}>{trilha.TITULO}</h4>
                   <p className={styles.trainingMeta}>
-                    {videoCount} {videoCount === 1 ? "video" : "videos"}
-                    {pdfCount > 0 ? ` + ${pdfCount} ${pdfCount === 1 ? "pdf" : "pdfs"}` : ""}
-                    {tokenProof ? " + prova individual" : ""}
+                    {[
+                      videoCount > 0
+                        ? `${videoCount} ${videoCount === 1 ? "video" : "videos"}`
+                        : null,
+                      documentCount > 0
+                        ? `${documentCount} ${documentCount === 1 ? "documento" : "documentos"}`
+                        : null,
+                      tokenProof ? "prova individual" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" + ")}
                   </p>
                   <Button
                     text="Assistir"
                     onClick={() => openTrilhaPlayer(trilha, null, tokenProof)}
-                    disabled={videoCount === 0 && pdfCount === 0 && !tokenProof}
+                    disabled={videoCount === 0 && documentCount === 0 && !tokenProof}
                   />
                 </article>
               ))}
@@ -1579,7 +1612,12 @@ const TrainingsPage = () => {
                     : currentPdf
                       ? resolvePdfTitle(currentPdf.PDF_PATH)
                     : currentVideo
-                      ? resolveVideoTitle(currentVideo.PATH_VIDEO)
+                      ? currentVideoDisplayKind === "video"
+                        ? resolveVideoTitle(currentVideo.PATH_VIDEO)
+                        : resolveDocumentTitle(
+                            currentVideo.PATH_VIDEO,
+                            currentVideoBadgeLabel,
+                          )
                       : "Selecione um conteudo"}
                 </span>
                 <span className={styles.trainingPlayerMeta}>
@@ -1587,11 +1625,13 @@ const TrainingsPage = () => {
                     ? `${answeredCount}/${totalQuestions} questoes respondidas`
                     : currentPdf
                       ? "Material em PDF"
-                    : currentVideoIndex >= 0
-                      ? `Video ${currentVideoIndex + 1} de ${activeQueue.length}`
+                    : currentVideo
+                      ? currentVideoDisplayKind === "video" && currentVideoIndex >= 0
+                        ? `Conteudo ${currentVideoIndex + 1} de ${activeQueue.length}`
+                        : `Arquivo ${currentVideoBadgeLabel}`
                       : ""}
                 </span>
-                {!isObjectivePhase && currentVideo ? (
+                {!isObjectivePhase && currentVideo && currentVideoDisplayKind === "video" ? (
                   <Button
                     text="Tela cheia"
                     variant="ghost"
@@ -1732,7 +1772,58 @@ const TrainingsPage = () => {
                 </div>
               ) : currentVideo ? (
                 <div ref={playerMediaRef} className={styles.trainingMediaWrapper}>
-                  {getYouTubeId(currentVideo.PATH_VIDEO ?? "") ? (
+                  {currentVideoDisplayKind === "pdf" ? (
+                    <div className={styles.trainingPdfContainer}>
+                      <div className={styles.trainingPdfActions}>
+                        <Button
+                          text="Abrir em nova aba"
+                          variant="ghost"
+                          onClick={() => {
+                            const src = resolveAssetUrl(currentVideo.PATH_VIDEO ?? "")
+                            if (!src) return
+                            window.open(src, "_blank", "noopener,noreferrer")
+                          }}
+                        />
+                        <Button
+                          text="Concluir e continuar"
+                          onClick={() => {
+                            void advanceToNextVideo()
+                          }}
+                        />
+                      </div>
+                      <iframe
+                        key={`${currentVideo.ID}-${currentVideo.VERSAO ?? 1}`}
+                        className={styles.trainingPdfFrame}
+                        src={resolveAssetUrl(currentVideo.PATH_VIDEO ?? "")}
+                        title={resolveDocumentTitle(currentVideo.PATH_VIDEO, "PDF")}
+                      />
+                    </div>
+                  ) : currentVideoDisplayKind === "document" ? (
+                    <div className={styles.trainingPdfContainer}>
+                      <div className={styles.trainingPdfActions}>
+                        <Button
+                          text="Abrir arquivo"
+                          variant="ghost"
+                          onClick={() => {
+                            const src = resolveAssetUrl(currentVideo.PATH_VIDEO ?? "")
+                            if (!src) return
+                            window.open(src, "_blank", "noopener,noreferrer")
+                          }}
+                        />
+                        <Button
+                          text="Concluir e continuar"
+                          onClick={() => {
+                            void advanceToNextVideo()
+                          }}
+                        />
+                      </div>
+                      <div className={styles.trainingPlayerPlaceholder}>
+                        Arquivo {currentVideoBadgeLabel} carregado para esta trilha. Use
+                        <strong> Abrir arquivo </strong>
+                        para visualizar o conteudo e depois conclua para continuar.
+                      </div>
+                    </div>
+                  ) : getYouTubeId(currentVideo.PATH_VIDEO ?? "") ? (
                     <YouTubeQueuePlayer
                       video={currentVideo.PATH_VIDEO ?? ""}
                       title={resolveVideoTitle(currentVideo.PATH_VIDEO)}
@@ -1776,6 +1867,14 @@ const TrainingsPage = () => {
                     const key = buildCompletionKey(video.ID, video.VERSAO)
                     const isDone = Boolean(completedByKey[key])
                     const isActive = currentVideo?.ID === video.ID
+                    const displayKind = resolveTrainingMaterialDisplayKind(
+                      video.PATH_VIDEO,
+                      video.TIPO_CONTEUDO,
+                    )
+                    const badgeLabel = resolveTrainingMaterialBadgeLabel(
+                      video.PATH_VIDEO,
+                      video.TIPO_CONTEUDO,
+                    )
                     return (
                       <li
                         key={`${video.ID}-${video.VERSAO ?? index}`}
@@ -1793,16 +1892,28 @@ const TrainingsPage = () => {
                           }}
                         >
                           <div className={styles.trainingQueueInfo}>
-                            <span className={`${styles.trainingQueueTypeBadge} ${isDone ? styles.trainingQueueTypeDone : styles.trainingQueueTypeVideo}`}>
-                              {isDone ? "Concluido" : "Pendente"}
+                            <span
+                              className={`${styles.trainingQueueTypeBadge} ${
+                                isDone
+                                  ? styles.trainingQueueTypeDone
+                                  : displayKind === "video"
+                                    ? styles.trainingQueueTypeVideo
+                                    : styles.trainingQueueTypePdf
+                              }`}
+                            >
+                              {isDone ? "Concluido" : badgeLabel}
                             </span>
                             <span className={styles.trainingQueueTitle}>
-                              {resolveVideoTitle(video.PATH_VIDEO)}
+                              {displayKind === "video"
+                                ? resolveVideoTitle(video.PATH_VIDEO)
+                                : resolveDocumentTitle(video.PATH_VIDEO, badgeLabel)}
                             </span>
                             <span className={styles.trainingQueueMeta}>
                               {isDone
                                 ? `Concluido em ${formatDateTime(completedByKey[key])}`
-                                : `Ordem ${video.ORDEM ?? index + 1}`}
+                                : displayKind === "video"
+                                  ? `Ordem ${video.ORDEM ?? index + 1}`
+                                  : `Arquivo ${badgeLabel}`}
                             </span>
                           </div>
                         </button>

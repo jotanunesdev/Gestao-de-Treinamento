@@ -40,6 +40,11 @@ import {
   resolveAccessibleSectorKeys,
   resolveSectorDefinitionFromModuleName,
 } from "../../shared/utils/sectorAccess"
+import {
+  resolveTrainingMaterialBadgeLabel,
+  resolveTrainingMaterialDisplayKind,
+  type TrainingMaterialDisplayKind,
+} from "../../shared/utils/trainingMaterialDisplay"
 
 type EmployeeRow = {
   id: string
@@ -55,6 +60,7 @@ type MaterialRow = {
   id: string
   ID: string
   TIPO: "video" | "pdf"
+  DISPLAY_KIND: TrainingMaterialDisplayKind
   CANAL_ID: string
   CANAL_NOME: string
   TRILHA_ID: string | null
@@ -513,6 +519,15 @@ const Instructor = () => {
     return materialsMap.get(currentMaterialId) ?? null
   }, [currentMaterialId, materialsMap])
 
+  const currentMaterialBadgeLabel = useMemo(
+    () =>
+      resolveTrainingMaterialBadgeLabel(
+        currentMaterial?.PATH_VIDEO,
+        currentMaterial?.TIPO ?? "video",
+      ),
+    [currentMaterial],
+  )
+
   const hasNextMaterial = useMemo(() => {
     if (!currentMaterialId) return false
     const currentIndex = orderedMaterialIds.indexOf(currentMaterialId)
@@ -631,10 +646,17 @@ const Instructor = () => {
         return null
       }
 
+      const displayKind = resolveTrainingMaterialDisplayKind(
+        video.PATH_VIDEO,
+        video.TIPO_CONTEUDO,
+      )
+      const badgeLabel = resolveTrainingMaterialBadgeLabel(video.PATH_VIDEO, video.TIPO_CONTEUDO)
+
       return {
         id: `video:${trilha.ID}:${video.ID}:${video.VERSAO ?? 1}`,
         ID: video.ID,
         TIPO: "video",
+        DISPLAY_KIND: displayKind,
         CANAL_ID: trilha.MODULO_FK_ID,
         CANAL_NOME: moduloNome,
         TRILHA_ID: trilha.ID,
@@ -642,7 +664,10 @@ const Instructor = () => {
         PATH_VIDEO: video.PATH_VIDEO,
         PROCEDIMENTO_ID: video.PROCEDIMENTO_ID ?? null,
         NORMA_ID: video.NORMA_ID ?? null,
-        TITULO: resolveVideoTitle(video.PATH_VIDEO),
+        TITULO:
+          displayKind === "video"
+            ? resolveVideoTitle(video.PATH_VIDEO)
+            : resolveDocumentTitle(video.PATH_VIDEO, badgeLabel),
         MODULO_NOME: moduloNome,
         TRILHA_TITULO: trilha.TITULO,
         ORDEM: video.ORDEM ?? null,
@@ -661,6 +686,7 @@ const Instructor = () => {
         id: `pdf:${trilha.ID}:${pdf.ID}:${pdf.VERSAO ?? 1}`,
         ID: pdf.ID,
         TIPO: "pdf",
+        DISPLAY_KIND: "pdf",
         CANAL_ID: trilha.MODULO_FK_ID,
         CANAL_NOME: moduloNome,
         TRILHA_ID: trilha.ID,
@@ -2052,15 +2078,18 @@ const Instructor = () => {
               ) : (
                 currentMaterial ? (
                   <div ref={instructorMediaRef} className={styles.trainingMediaWrapper}>
-                    {currentMaterial.TIPO === "pdf" ? (
+                    {currentMaterial.DISPLAY_KIND === "pdf" ? (
                       <div className={styles.trainingPdfContainer}>
-                        <iframe
-                          key={`${currentMaterial.id}-${currentMaterial.VERSAO}`}
-                          className={styles.trainingPdfFrame}
-                          src={resolveAssetUrl(currentMaterial.PATH_VIDEO ?? "")}
-                          title={currentMaterial.TITULO || "PDF"}
-                        />
                         <div className={styles.trainingPdfActions}>
+                          <Button
+                            text="Abrir em nova aba"
+                            variant="ghost"
+                            onClick={() => {
+                              const src = resolveAssetUrl(currentMaterial.PATH_VIDEO ?? "")
+                              if (!src) return
+                              window.open(src, "_blank", "noopener,noreferrer")
+                            }}
+                          />
                           <Button
                             text={hasNextMaterial ? "Proximo" : "Finalizar Treinamento"}
                             onClick={() => {
@@ -2068,6 +2097,38 @@ const Instructor = () => {
                             }}
                             disabled={isFinishingTraining}
                           />
+                        </div>
+                        <iframe
+                          key={`${currentMaterial.id}-${currentMaterial.VERSAO}`}
+                          className={styles.trainingPdfFrame}
+                          src={resolveAssetUrl(currentMaterial.PATH_VIDEO ?? "")}
+                          title={currentMaterial.TITULO || "PDF"}
+                        />
+                      </div>
+                    ) : currentMaterial.DISPLAY_KIND === "document" ? (
+                      <div className={styles.trainingPdfContainer}>
+                        <div className={styles.trainingPdfActions}>
+                          <Button
+                            text="Abrir arquivo"
+                            variant="ghost"
+                            onClick={() => {
+                              const src = resolveAssetUrl(currentMaterial.PATH_VIDEO ?? "")
+                              if (!src) return
+                              window.open(src, "_blank", "noopener,noreferrer")
+                            }}
+                          />
+                          <Button
+                            text={hasNextMaterial ? "Proximo" : "Finalizar Treinamento"}
+                            onClick={() => {
+                              void advanceToNextMaterial()
+                            }}
+                            disabled={isFinishingTraining}
+                          />
+                        </div>
+                        <div className={styles.trainingPlayerPlaceholder}>
+                          Arquivo {currentMaterialBadgeLabel} carregado para esta trilha. Use
+                          <strong> Abrir arquivo </strong>
+                          para visualizar o conteudo e depois avance no treinamento.
                         </div>
                       </div>
                     ) : getYouTubeId(currentMaterial.PATH_VIDEO ?? "") ? (
@@ -2180,6 +2241,10 @@ const Instructor = () => {
                       const isDragging = material.id === draggedMaterialId
                       const isDropTarget = material.id === dropTargetMaterialId
                       const isDone = completedMaterialIds.includes(material.id)
+                      const badgeLabel = resolveTrainingMaterialBadgeLabel(
+                        material.PATH_VIDEO,
+                        material.TIPO,
+                      )
                       return (
                         <li
                           key={material.id}
@@ -2232,12 +2297,12 @@ const Instructor = () => {
                                 className={`${styles.trainingQueueTypeBadge} ${
                                   isDone
                                     ? styles.trainingQueueTypeDone
-                                    : material.TIPO === "pdf"
-                                      ? styles.trainingQueueTypePdf
-                                      : styles.trainingQueueTypeVideo
+                                    : material.DISPLAY_KIND === "video"
+                                      ? styles.trainingQueueTypeVideo
+                                      : styles.trainingQueueTypePdf
                                 }`}
                               >
-                                {isDone ? "Concluido" : material.TIPO === "pdf" ? "PDF" : "Video"}
+                                {isDone ? "Concluido" : badgeLabel}
                               </span>
                               <span className={styles.trainingQueueTitle}>{material.TITULO}</span>
                               <span className={styles.trainingQueueMeta}>
