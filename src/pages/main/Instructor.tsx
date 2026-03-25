@@ -71,14 +71,13 @@ type MaterialRow = {
 type TrilhaRow = {
   id: string
   ID: string
+  MODULO_FK_ID: string
   TITULO: string
   MODULO_NOME: string
   DURACAO_HORAS?: number | null
-  VIDEO_COUNT: number
-  PDF_COUNT: number
-  MATERIAL_IDS: string[]
-  MATERIALS: MaterialRow[]
 }
+
+type TrilhaMaterialSource = Pick<TrilhaItem, "ID" | "TITULO" | "MODULO_FK_ID">
 
 type CollectiveParticipant = {
   id: string
@@ -487,14 +486,6 @@ const Instructor = () => {
       { key: "TITULO", header: "Trilha" },
       { key: "MODULO_NOME", header: "Modulo" },
       {
-        key: "MATERIAIS",
-        header: "Conteudo",
-        render: (row) =>
-          `${row.VIDEO_COUNT} ${row.VIDEO_COUNT === 1 ? "video" : "videos"}${
-            row.PDF_COUNT > 0 ? ` + ${row.PDF_COUNT} ${row.PDF_COUNT === 1 ? "pdf" : "pdfs"}` : ""
-          }`,
-      },
-      {
         key: "DURACAO_HORAS",
         header: "Duracao",
         render: (row) => formatDurationHours(row.DURACAO_HORAS),
@@ -564,16 +555,7 @@ const Instructor = () => {
   const hasIndividualProvas = individualProvas.length > 0
 
   const canOpenOrderModal =
-    selectedParticipantIds.length > 0 &&
-    selectedTrilhaIds.length > 0 &&
-    selectedMaterialIds.length > 0
-
-  useEffect(() => {
-    const nextSelectedMaterialIds = selectedTrilhaIds.flatMap(
-      (trilhaId) => trilhasMap.get(trilhaId)?.MATERIAL_IDS ?? [],
-    )
-    setSelectedMaterialIds(nextSelectedMaterialIds)
-  }, [selectedTrilhaIds, trilhasMap])
+    selectedParticipantIds.length > 0 && selectedTrilhaIds.length > 0
 
   useEffect(() => {
     setOrderedMaterialIds((prev) => {
@@ -644,7 +626,7 @@ const Instructor = () => {
   }, [accessibleSectorKeys])
 
   const buildMaterialRowFromVideo = useCallback(
-    (video: VideoItem, trilha: TrilhaItem, moduloNome: string): MaterialRow | null => {
+    (video: VideoItem, trilha: TrilhaMaterialSource, moduloNome: string): MaterialRow | null => {
       if (!video.PATH_VIDEO) {
         return null
       }
@@ -670,7 +652,7 @@ const Instructor = () => {
   )
 
   const buildMaterialRowFromPdf = useCallback(
-    (pdf: PdfItem, trilha: TrilhaItem, moduloNome: string): MaterialRow | null => {
+    (pdf: PdfItem, trilha: TrilhaMaterialSource, moduloNome: string): MaterialRow | null => {
       if (!pdf.PDF_PATH) {
         return null
       }
@@ -695,46 +677,33 @@ const Instructor = () => {
     [],
   )
 
-  const fetchTrilhasAndMaterialsByModule = useCallback(
-    async (moduleId: string, moduloNome: string) => {
-      const response = await fetchTrilhasByModule(moduleId)
-      const trilhaList = (response.trilhas ?? []).sort((a, b) =>
-        a.TITULO.localeCompare(b.TITULO, "pt-BR"),
-      )
-
-      const rows = await Promise.all(
-        trilhaList.map(async (trilha) => {
+  const loadMaterialsByTrilhas = useCallback(
+    async (selectedTrilhasRows: TrilhaRow[]) => {
+      const materialGroups = await Promise.all(
+        selectedTrilhasRows.map(async (trilha) => {
           const [videosResponse, pdfsResponse] = await Promise.all([
             fetchVideosByTrilha(trilha.ID),
             fetchPdfsByTrilha(trilha.ID),
           ])
 
-          const videoMaterials = (videosResponse.videos ?? [])
-            .map((video) => buildMaterialRowFromVideo(video, trilha, moduloNome))
-            .filter((item): item is MaterialRow => Boolean(item))
-          const pdfMaterials = (pdfsResponse.pdfs ?? [])
-            .map((pdf) => buildMaterialRowFromPdf(pdf, trilha, moduloNome))
-            .filter((item): item is MaterialRow => Boolean(item))
-          const nextMaterials = sortMaterialRows([...videoMaterials, ...pdfMaterials])
-
-          return {
-            id: trilha.ID,
+          const materialSource = {
             ID: trilha.ID,
             TITULO: trilha.TITULO,
-            MODULO_NOME: moduloNome,
-            DURACAO_HORAS: trilha.DURACAO_HORAS ?? null,
-            VIDEO_COUNT: videoMaterials.length,
-            PDF_COUNT: pdfMaterials.length,
-            MATERIAL_IDS: nextMaterials.map((material) => material.id),
-            MATERIALS: nextMaterials,
-          } satisfies TrilhaRow
+            MODULO_FK_ID: trilha.MODULO_FK_ID,
+          } satisfies TrilhaMaterialSource
+
+          const videoMaterials = (videosResponse.videos ?? [])
+            .map((video) => buildMaterialRowFromVideo(video, materialSource, trilha.MODULO_NOME))
+            .filter((item): item is MaterialRow => Boolean(item))
+          const pdfMaterials = (pdfsResponse.pdfs ?? [])
+            .map((pdf) => buildMaterialRowFromPdf(pdf, materialSource, trilha.MODULO_NOME))
+            .filter((item): item is MaterialRow => Boolean(item))
+
+          return sortMaterialRows([...videoMaterials, ...pdfMaterials])
         }),
       )
 
-      return {
-        trilhas: rows,
-        materials: rows.flatMap((row) => row.MATERIALS),
-      }
+      return materialGroups.flat()
     },
     [buildMaterialRowFromPdf, buildMaterialRowFromVideo],
   )
@@ -887,13 +856,22 @@ const Instructor = () => {
     try {
       setIsLoadingTrilhas(true)
       setErrorMessage(null)
-      const modulePayload = await fetchTrilhasAndMaterialsByModule(
-        selectedModule.ID,
-        selectedModule.NOME,
-      )
-      setTrilhas(modulePayload.trilhas)
-      const materialsRows = modulePayload.materials
-      setMaterials(materialsRows)
+      const response = await fetchTrilhasByModule(selectedModule.ID)
+      const trilhasRows = (response.trilhas ?? [])
+        .sort((a, b) => a.TITULO.localeCompare(b.TITULO, "pt-BR"))
+        .map(
+          (trilha) =>
+            ({
+              id: trilha.ID,
+              ID: trilha.ID,
+              MODULO_FK_ID: trilha.MODULO_FK_ID,
+              TITULO: trilha.TITULO,
+              MODULO_NOME: selectedModule.NOME,
+              DURACAO_HORAS: trilha.DURACAO_HORAS ?? null,
+            }) satisfies TrilhaRow,
+        )
+      setTrilhas(trilhasRows)
+      setMaterials([])
       setAppliedModuleId(selectedModule.ID)
       setSelectedTrilhaIds([])
       setSelectedMaterialIds([])
@@ -906,7 +884,7 @@ const Instructor = () => {
     } finally {
       setIsLoadingTrilhas(false)
     }
-  }, [fetchTrilhasAndMaterialsByModule, modules, selectedModuleId])
+  }, [modules, selectedModuleId])
 
   const moveMaterial = useCallback((sourceId: string, targetId: string) => {
     setOrderedMaterialIds((prev) => {
@@ -1330,47 +1308,80 @@ const Instructor = () => {
     selectedParticipants,
   ])
 
-  const handleOpenOrderModal = () => {
+  const handleOpenOrderModal = async () => {
     if (!canOpenOrderModal) {
       return
     }
 
-    setIsModalOpen(true)
-    setIsTrainingStarted(false)
-    setIsProvaPhase(false)
-    setCurrentMaterialId(orderedMaterialIds[0] ?? null)
-    setCollectiveProvas([])
-    setIndividualProvas([])
-    setCollectiveAnswers({})
-    setCollectiveResults({})
-    setCurrentProvaIndex(0)
-    setProvaErrorMessage(null)
-    setCompletedMaterialIds([])
-    setHasRecordedVideoCompletion(false)
-    setIsFaceModalOpen(false)
-    setIsCollectiveEvidenceModalOpen(false)
-    setIsQrModalOpen(false)
-    setIsEfficacyModalOpen(false)
-    setCollectiveDurationHours(0)
-    setCollectiveDurationMinutes(15)
-    setCollectiveEvidenceFiles([])
-    setCollectiveEvidenceError(null)
-    setCollectiveQrState(null)
-    setCollectiveQrError(null)
-    setIsGeneratingQr(false)
-    setCollectiveEfficacyLevels({})
-    setCollectiveEfficacyError(null)
-    setPendingCollectiveFinalMessage(null)
-    setActiveTurmaId(null)
-    setActiveTurmaNome(null)
-    setFeedbackMessage(null)
-    setErrorMessage(null)
+    const selectedRows = selectedTrilhaIds
+      .map((trilhaId) => trilhasMap.get(trilhaId) ?? null)
+      .filter((trilha): trilha is TrilhaRow => Boolean(trilha))
+
+    if (!selectedRows.length) {
+      setErrorMessage("Selecione ao menos uma trilha para revisar o treinamento.")
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      setFeedbackMessage(null)
+      setErrorMessage(null)
+
+      const loadedMaterials = await loadMaterialsByTrilhas(selectedRows)
+      if (!loadedMaterials.length) {
+        setErrorMessage(
+          "As trilhas selecionadas nao possuem conteudo disponivel para iniciar o treinamento.",
+        )
+        return
+      }
+
+      const loadedMaterialIds = loadedMaterials.map((material) => material.id)
+      setMaterials(loadedMaterials)
+      setSelectedMaterialIds(loadedMaterialIds)
+      setOrderedMaterialIds(loadedMaterialIds)
+      setIsModalOpen(true)
+      setIsTrainingStarted(false)
+      setIsProvaPhase(false)
+      setCurrentMaterialId(loadedMaterialIds[0] ?? null)
+      setCollectiveProvas([])
+      setIndividualProvas([])
+      setCollectiveAnswers({})
+      setCollectiveResults({})
+      setCurrentProvaIndex(0)
+      setProvaErrorMessage(null)
+      setCompletedMaterialIds([])
+      setHasRecordedVideoCompletion(false)
+      setIsFaceModalOpen(false)
+      setIsCollectiveEvidenceModalOpen(false)
+      setIsQrModalOpen(false)
+      setIsEfficacyModalOpen(false)
+      setCollectiveDurationHours(0)
+      setCollectiveDurationMinutes(15)
+      setCollectiveEvidenceFiles([])
+      setCollectiveEvidenceError(null)
+      setCollectiveQrState(null)
+      setCollectiveQrError(null)
+      setIsGeneratingQr(false)
+      setCollectiveEfficacyLevels({})
+      setCollectiveEfficacyError(null)
+      setPendingCollectiveFinalMessage(null)
+      setActiveTurmaId(null)
+      setActiveTurmaNome(null)
+    } catch (error) {
+      console.error("Erro ao carregar o conteudo das trilhas selecionadas:", error)
+      setErrorMessage("Nao foi possivel carregar o conteudo das trilhas selecionadas.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleCloseOrderModal = () => {
     setIsModalOpen(false)
     setIsTrainingStarted(false)
     setIsProvaPhase(false)
+    setMaterials([])
+    setSelectedMaterialIds([])
+    setOrderedMaterialIds([])
     setCurrentMaterialId(null)
     setCollectiveProvas([])
     setIndividualProvas([])
@@ -1780,7 +1791,7 @@ const Instructor = () => {
                 {!appliedModuleId ? (
                   <p className={styles.trainingEmployeeFilterHint}>
                     Selecione um <strong>modulo</strong> e clique em <strong>Buscar</strong> para
-                    carregar as trilhas existentes.
+                    carregar as trilhas disponiveis para o seu setor.
                   </p>
                 ) : null}
                 <Table
@@ -1788,7 +1799,7 @@ const Instructor = () => {
                   data={trilhas}
                   selectable
                   searchable={Boolean(appliedModuleId)}
-                  searchableKeys={["TITULO", "MODULO_NOME"]}
+                  searchableKeys={["TITULO"]}
                   onSelectionChange={setSelectedTrilhaIds}
                   selectedRowIds={selectedTrilhaIds}
                   getRowId={(row) => row.id}
@@ -1797,7 +1808,7 @@ const Instructor = () => {
                       ? "Nenhuma trilha encontrada para o modulo selecionado."
                       : "Selecione um modulo e clique em Buscar."
                   }
-                  searchPlaceholder="Buscar por trilha ou modulo"
+                  searchPlaceholder="Buscar por trilha"
                   pageSize={8}
                 />
               </div>
@@ -1806,18 +1817,19 @@ const Instructor = () => {
                 <div className={styles.trainingActionInfo}>
                   <span className={styles.trainingActionTitle}>Pronto para revisar?</span>
                   <span className={styles.trainingActionHint}>
-                    {selectedParticipantIds.length} participantes, {selectedTrilhaIds.length} trilhas e {selectedMaterialIds.length} materiais carregados.
+                    {selectedParticipantIds.length} participantes e {selectedTrilhaIds.length} trilhas selecionadas.
                   </span>
-                  {requiresFacialValidation ? (
-                    <span className={styles.trainingActionHint}>
-                      Este treinamento possui material vinculado a procedimento ou norma e exigira validacao facial ao final.
-                    </span>
-                  ) : null}
+                  <span className={styles.trainingActionHint}>
+                    O conteudo completo das trilhas sera carregado ao revisar o treinamento.
+                  </span>
                 </div>
                 <Button
                   text="Revisar Treinamento"
-                  onClick={handleOpenOrderModal}
+                  onClick={() => {
+                    void handleOpenOrderModal()
+                  }}
                   disabled={!canOpenOrderModal}
+                  isLoading={isLoading}
                 />
               </div>
             </div>
@@ -1896,7 +1908,7 @@ const Instructor = () => {
               <p className={styles.trainingModalHint}>
                 {isProvaPhase
                   ? "Responda a prova em grupo. O resultado sera aplicado para todos os participantes."
-                  : "Revise a fila de materiais carregada a partir das trilhas selecionadas e ajuste a sequencia se necessario."}
+                  : "Revise o conteudo carregado a partir das trilhas selecionadas e ajuste a sequencia se necessario."}
               </p>
               {activeTurmaNome ? (
                 <p className={styles.trainingQueueMeta}>Turma ativa: {activeTurmaNome}</p>
@@ -2091,14 +2103,14 @@ const Instructor = () => {
                   </div>
                 ) : (
                   <div className={styles.trainingPlayerPlaceholder}>
-                    Selecione um material para iniciar.
+                    Selecione um conteudo para iniciar.
                   </div>
                 )
               )}
 
               {!isTrainingStarted && !isProvaPhase ? (
                 <p className={styles.trainingQueueMeta}>
-                  Use a fila da direita para ordenar e clique em Iniciar Treinamento.
+                  Use a fila da direita para ordenar o conteudo das trilhas e clique em Iniciar Treinamento.
                 </p>
               ) : null}
               {collectiveSummaryMessage ? (
@@ -2108,7 +2120,7 @@ const Instructor = () => {
 
             <div className={styles.trainingQueuePanel}>
               <div className={styles.trainingQueueHeader}>
-                <h4>{isProvaPhase ? "Fila de provas" : "Fila de materiais"}</h4>
+                <h4>{isProvaPhase ? "Fila de provas" : "Conteudo das trilhas"}</h4>
                 <span className={styles.trainingQueueCount}>
                   {isProvaPhase ? collectiveProvas.length : orderedMaterials.length}
                 </span>
@@ -2240,7 +2252,7 @@ const Instructor = () => {
                     })}
                   </ul>
                 ) : (
-                  <div className={styles.trainingQueueEmpty}>Nenhum material selecionado.</div>
+                  <div className={styles.trainingQueueEmpty}>Nenhum conteudo carregado.</div>
                 )
               )}
             </div>
