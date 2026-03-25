@@ -4,7 +4,10 @@ export type PdfItem = {
   ID: string
   TRILHA_FK_ID: string
   PDF_PATH: string | null
+  ORDEM?: number | null
   VERSAO: number
+  PROCEDIMENTO_ID?: string | null
+  NORMA_ID?: string | null
 }
 
 export async function fetchUserPdfs(cpf: string) {

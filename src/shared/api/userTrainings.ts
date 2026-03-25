@@ -28,6 +28,37 @@ export async function completeVideoTraining(payload: {
   })
 }
 
+export async function completePdfTraining(payload: {
+  cpf: string
+  pdfId: string
+  materialVersao?: number
+  concluidoEm?: string
+  origem?: string
+  user?: Record<string, string>
+}) {
+  const normalizedCpf = payload.cpf.replace(/\D/g, "")
+  return apiFetch<{ inserted: number }>("/api/user-trainings", {
+    method: "POST",
+    body: JSON.stringify({
+      users: [
+        {
+          ...(payload.user ?? {}),
+          CPF: normalizedCpf,
+        },
+      ],
+      trainings: [
+        {
+          tipo: "pdf",
+          materialId: payload.pdfId,
+          materialVersao: payload.materialVersao ?? null,
+        },
+      ],
+      concluidoEm: payload.concluidoEm,
+      origem: payload.origem ?? "player-pdf",
+    }),
+  })
+}
+
 export async function listCompletedVideoTrainings(cpf: string) {
   return apiFetch<{ completions: UserVideoCompletionRecord[] }>(
     `/api/user-trainings/completions/videos/${encodeURIComponent(cpf)}`,
@@ -37,7 +68,7 @@ export async function listCompletedVideoTrainings(cpf: string) {
 export async function recordCollectiveTraining(payload: {
   users: Array<Record<string, string>>
   trainings: Array<{
-    tipo: "video"
+    tipo: "video" | "pdf"
     materialId: string
     materialVersao?: number | null
   }>

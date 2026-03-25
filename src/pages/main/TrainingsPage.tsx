@@ -17,6 +17,7 @@ import {
 import { fetchUserPdfs, type PdfItem } from "../../shared/api/pdfs"
 import {
   attachCollectiveTrainingFaceEvidence,
+  completePdfTraining,
   completeVideoTraining,
   listCompletedVideoTrainings,
   submitTrilhaTrainingEfficacy,
@@ -140,11 +141,45 @@ const getYouTubeId = (urlOrId: string) => {
 const buildCompletionKey = (videoId: string, versao?: number | null) =>
   `${videoId}:${versao ?? 0}`
 
+const buildPdfCompletionStorageKey = (cpf: string) => `jnc:training:pdf-completions:${cpf}`
+
+const readPdfCompletionsFromStorage = (cpf: string): Record<string, string> => {
+  if (typeof window === "undefined") return {}
+  try {
+    const raw = window.localStorage.getItem(buildPdfCompletionStorageKey(cpf))
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {}
+    return Object.entries(parsed).reduce<Record<string, string>>((acc, [key, value]) => {
+      if (typeof key !== "string" || typeof value !== "string") return acc
+      acc[key] = value
+      return acc
+    }, {})
+  } catch {
+    return {}
+  }
+}
+
+const savePdfCompletionsToStorage = (cpf: string, value: Record<string, string>) => {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(buildPdfCompletionStorageKey(cpf), JSON.stringify(value))
+  } catch {
+    // ignore storage errors
+  }
+}
+
 const findFirstPendingVideo = (
   queue: VideoItem[],
   completedMap: Record<string, string>,
 ) =>
   queue.find((video) => !completedMap[buildCompletionKey(video.ID, video.VERSAO)]) ?? null
+
+const findFirstPendingPdf = (
+  queue: PdfItem[],
+  completedMap: Record<string, string>,
+) =>
+  queue.find((pdf) => !completedMap[buildCompletionKey(pdf.ID, pdf.VERSAO)]) ?? null
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "-"
@@ -344,6 +379,7 @@ const TrainingsPage = () => {
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [pdfs, setPdfs] = useState<PdfItem[]>([])
   const [completedByKey, setCompletedByKey] = useState<Record<string, string>>({})
+  const [completedPdfByKey, setCompletedPdfByKey] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -398,6 +434,21 @@ const TrainingsPage = () => {
   useEffect(() => {
     satisfactionPromptShownRef.current = false
   }, [cpf])
+
+  useEffect(() => {
+    if (!cpf || cpf.length !== 11) {
+      setCompletedPdfByKey({})
+      return
+    }
+    setCompletedPdfByKey(readPdfCompletionsFromStorage(cpf))
+  }, [cpf])
+
+  useEffect(() => {
+    if (!cpf || cpf.length !== 11) {
+      return
+    }
+    savePdfCompletionsToStorage(cpf, completedPdfByKey)
+  }, [completedPdfByKey, cpf])
 
   const routeState = location.state as TrainingsRouteState | null
   const focusTraining = routeState?.focusTraining ?? null
@@ -760,6 +811,7 @@ const TrainingsPage = () => {
     }
 
     const firstPending = findFirstPendingVideo(trilhaVideos, completedByKey) ?? trilhaVideos[0]
+    const firstPendingPdf = findFirstPendingPdf(trilhaPdfs, completedPdfByKey)
     const preferredVideo = preferredVideoId
       ? trilhaVideos.find((video) => video.ID === preferredVideoId) ?? null
       : null
@@ -770,17 +822,20 @@ const TrainingsPage = () => {
 
     const startVideo = canUsePreferred && preferredVideo ? preferredVideo : firstPending
 
+    const shouldOpenTokenProofDirectly =
+      Boolean(tokenProof) && trilhaVideos.length === 0 && !firstPendingPdf
+
     setActiveQueue(trilhaVideos)
     setActiveTrilhaTitle(trilha.TITULO)
     setActiveTrilhaId(trilha.ID)
     setCurrentVideoId(startVideo?.ID ?? null)
-    setCurrentPdfId(startVideo ? null : (trilhaPdfs[0]?.ID ?? null))
+    setCurrentPdfId(startVideo ? null : (firstPendingPdf?.ID ?? null))
     setPlayerMessage(
-      tokenProof && trilhaVideos.length === 0
+      shouldOpenTokenProofDirectly
         ? "Prova individual liberada via QR Code. Responda para concluir."
         : null,
     )
-    setIsObjectivePhase(Boolean(tokenProof) && trilhaVideos.length === 0)
+    setIsObjectivePhase(shouldOpenTokenProofDirectly)
     setObjectiveAnswers({})
     setObjectiveError(null)
     setObjectiveResult(null)
@@ -790,7 +845,7 @@ const TrainingsPage = () => {
     setIsSubmittingEfficacy(false)
     setPendingEfficacyFinalMessage(null)
     setIsPlayerModalOpen(true)
-  }, [completedByKey, pdfsByTrilha, videosByTrilha])
+  }, [completedByKey, completedPdfByKey, pdfsByTrilha, videosByTrilha])
 
   const closeTrilhaPlayer = () => {
     setIsPlayerModalOpen(false)
@@ -868,6 +923,18 @@ const TrainingsPage = () => {
     if (!currentPdfId) return null
     return activeTrilhaPdfs.find((item) => item.ID === currentPdfId) ?? null
   }, [activeTrilhaPdfs, currentPdfId])
+
+  const completedPdfsInTrilha = useMemo(
+    () =>
+      activeTrilhaPdfs.filter((pdf) => completedPdfByKey[buildCompletionKey(pdf.ID, pdf.VERSAO)])
+        .length,
+    [activeTrilhaPdfs, completedPdfByKey],
+  )
+
+  const totalMaterialsInTrilha = useMemo(
+    () => activeQueue.length + activeTrilhaPdfs.length,
+    [activeQueue.length, activeTrilhaPdfs.length],
+  )
 
   useEffect(() => {
     if (!focusTraining || isPlayerModalOpen) {
@@ -973,6 +1040,11 @@ const TrainingsPage = () => {
     return activeQueue.filter((video) => completedByKey[buildCompletionKey(video.ID, video.VERSAO)]).length
   }, [activeQueue, completedByKey])
 
+  const completedMaterialsInTrilha = useMemo(
+    () => completedInQueue + completedPdfsInTrilha,
+    [completedInQueue, completedPdfsInTrilha],
+  )
+
   const handleHtmlVideoTimeUpdate = useCallback((event: SyntheticEvent<HTMLVideoElement>) => {
     if (!isPlayerModalOpen || isObjectivePhase || !currentVideo || !activeTrilhaId) {
       return
@@ -1020,6 +1092,56 @@ const TrainingsPage = () => {
     isPlayerModalOpen,
   ])
 
+  const moveToPostContentStep = useCallback(() => {
+    if (isObjectiveLoading) {
+      setPlayerMessage("Carregando prova objetiva. Aguarde um instante.")
+      return
+    }
+
+    if (objectiveProva) {
+      setCurrentVideoId(null)
+      setCurrentPdfId(null)
+      setIsObjectivePhase(true)
+      setPlayerMessage("Materiais concluidos. Responda a prova objetiva para finalizar a trilha.")
+      return
+    }
+
+    setCurrentVideoId(null)
+    setCurrentPdfId(null)
+    openTrilhaEfficacyModal("Trilha concluida. Todos os materiais foram finalizados.")
+  }, [isObjectiveLoading, objectiveProva, openTrilhaEfficacyModal])
+
+  const handleCompletePdf = useCallback(async (pdf: PdfItem) => {
+    if (!cpf || cpf.length !== 11) return null
+
+    const key = buildCompletionKey(pdf.ID, pdf.VERSAO)
+    if (completedPdfByKey[key]) {
+      return completedPdfByKey[key]
+    }
+
+    const completedAt = new Date().toISOString()
+
+    try {
+      await completePdfTraining({
+        cpf,
+        pdfId: pdf.ID,
+        materialVersao: pdf.VERSAO,
+        concluidoEm: completedAt,
+        origem: "player-pdf",
+        user: userPayload,
+      })
+      setCompletedPdfByKey((prev) => ({
+        ...prev,
+        [key]: completedAt,
+      }))
+      return completedAt
+    } catch (err) {
+      console.error("Erro ao registrar conclusao do PDF:", err)
+      setPlayerMessage("Nao foi possivel registrar a conclusao do PDF. Tente novamente.")
+      return null
+    }
+  }, [completedPdfByKey, cpf, userPayload])
+
   const advanceToNextVideo = useCallback(async () => {
     if (!currentVideo || currentVideoIndex < 0) return
 
@@ -1036,26 +1158,72 @@ const TrainingsPage = () => {
     const pendingVideo = findFirstPendingVideo(activeQueue, snapshot)
     if (pendingVideo) {
       setCurrentVideoId(pendingVideo.ID)
+      setCurrentPdfId(null)
       setPlayerMessage(null)
       setIsObjectivePhase(false)
       return
     }
 
-    if (objectiveProva) {
-      setIsObjectivePhase(true)
-      setPlayerMessage("Videos concluidos. Responda a prova objetiva para finalizar a trilha.")
+    const pendingPdf = findFirstPendingPdf(activeTrilhaPdfs, completedPdfByKey)
+    if (pendingPdf) {
+      setCurrentVideoId(null)
+      setCurrentPdfId(pendingPdf.ID)
+      setPlayerMessage("Videos concluidos. Conclua os PDFs para continuar.")
+      setIsObjectivePhase(false)
       return
     }
 
-    openTrilhaEfficacyModal("Trilha concluida. Todos os videos foram finalizados.")
+    moveToPostContentStep()
   }, [
     activeQueue,
+    activeTrilhaPdfs,
     completedByKey,
+    completedPdfByKey,
     currentVideo,
     currentVideoIndex,
     handleCompleteVideo,
-    openTrilhaEfficacyModal,
-    objectiveProva,
+    moveToPostContentStep,
+  ])
+
+  const handleCompleteCurrentPdf = useCallback(async () => {
+    if (!currentPdf) return
+
+    const snapshot = { ...completedPdfByKey }
+    const currentKey = buildCompletionKey(currentPdf.ID, currentPdf.VERSAO)
+
+    if (!snapshot[currentKey]) {
+      const completedAt = await handleCompletePdf(currentPdf)
+      if (!completedAt) return
+      snapshot[currentKey] = completedAt
+    }
+
+    const pendingVideo = findFirstPendingVideo(activeQueue, completedByKey)
+    if (pendingVideo) {
+      setCurrentVideoId(pendingVideo.ID)
+      setCurrentPdfId(null)
+      setPlayerMessage("PDF concluido. Continue com os videos da trilha.")
+      setIsObjectivePhase(false)
+      return
+    }
+
+    const pendingPdf = findFirstPendingPdf(activeTrilhaPdfs, snapshot)
+    if (pendingPdf) {
+      setCurrentVideoId(null)
+      setCurrentPdfId(pendingPdf.ID)
+      setPlayerMessage("PDF concluido. Continue para o proximo documento.")
+      setIsObjectivePhase(false)
+      return
+    }
+
+    moveToPostContentStep()
+  }, [
+    activeQueue,
+    activeTrilhaPdfs,
+    completedByKey,
+    completedPdfByKey,
+    currentPdf,
+    handleCompletePdf,
+    moveToPostContentStep,
   ])
 
   const answeredCount = useMemo(() => {
@@ -1390,7 +1558,7 @@ const TrainingsPage = () => {
             <div>
               <h4 className={styles.trainingModalTitle}>{activeTrilhaTitle}</h4>
               <p className={styles.trainingModalHint}>
-                {completedInQueue}/{activeQueue.length} videos concluidos
+                {completedMaterialsInTrilha}/{totalMaterialsInTrilha} materiais concluidos
               </p>
             </div>
             {isActiveTokenProofFlow ? (
@@ -1545,6 +1713,16 @@ const TrainingsPage = () => {
                         window.open(src, "_blank", "noopener,noreferrer")
                       }}
                     />
+                    <Button
+                      text={
+                        completedPdfByKey[buildCompletionKey(currentPdf.ID, currentPdf.VERSAO)]
+                          ? "Leitura concluida"
+                          : "Concluir leitura"
+                      }
+                      onClick={() => {
+                        void handleCompleteCurrentPdf()
+                      }}
+                    />
                   </div>
                   <iframe
                     className={styles.trainingPdfFrame}
@@ -1578,7 +1756,7 @@ const TrainingsPage = () => {
                   )}
                 </div>
               ) : (
-                <div className={styles.trainingPlayerPlaceholder}>Nenhum video disponivel.</div>
+                <div className={styles.trainingPlayerPlaceholder}>Nenhum material disponivel.</div>
               )}
 
               {playerMessage ? (
@@ -1589,8 +1767,8 @@ const TrainingsPage = () => {
             {!isActiveTokenProofFlow ? (
               <div className={styles.trainingQueuePanel}>
                 <div className={styles.trainingQueueHeader}>
-                  <h4>{isObjectivePhase ? "Resumo da trilha" : "Proximos videos"}</h4>
-                  <span className={styles.trainingQueueCount}>{activeQueue.length}</span>
+                  <h4>{isObjectivePhase ? "Resumo da trilha" : "Materiais da trilha"}</h4>
+                  <span className={styles.trainingQueueCount}>{totalMaterialsInTrilha}</span>
                 </div>
 
                 <ul className={styles.trainingQueueList}>
@@ -1638,6 +1816,9 @@ const TrainingsPage = () => {
                     <ul className={styles.trainingPdfList}>
                       {activeTrilhaPdfs.map((pdf) => {
                         const isActive = currentPdf?.ID === pdf.ID
+                        const completionKey = buildCompletionKey(pdf.ID, pdf.VERSAO)
+                        const completedAt = completedPdfByKey[completionKey]
+                        const isDone = Boolean(completedAt)
                         return (
                           <li key={`${pdf.ID}-${pdf.VERSAO}`}>
                             <button
@@ -1647,13 +1828,27 @@ const TrainingsPage = () => {
                               }`}
                               onClick={() => {
                                 setCurrentPdfId(pdf.ID)
+                                setCurrentVideoId(null)
                                 setIsObjectivePhase(false)
                                 setPlayerMessage(null)
                               }}
                             >
-                              <span className={styles.trainingQueueTypeBadge}>PDF</span>
-                              <span className={styles.trainingPdfName}>
-                                {resolvePdfTitle(pdf.PDF_PATH)}
+                              <span
+                                className={`${styles.trainingQueueTypeBadge} ${
+                                  isDone ? styles.trainingQueueTypeDone : styles.trainingQueueTypePdf
+                                }`}
+                              >
+                                {isDone ? "Concluido" : "PDF"}
+                              </span>
+                              <span className={styles.trainingPdfInfo}>
+                                <span className={styles.trainingPdfName}>
+                                  {resolvePdfTitle(pdf.PDF_PATH)}
+                                </span>
+                                <span className={styles.trainingQueueMeta}>
+                                  {isDone
+                                    ? `Concluido em ${formatDateTime(completedAt)}`
+                                    : "Leitura pendente"}
+                                </span>
                               </span>
                             </button>
                           </li>
