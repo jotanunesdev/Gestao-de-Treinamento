@@ -34,7 +34,7 @@ function normalizePath(path: string) {
   return path
 }
 
-function resolveUrl(path: string) {
+export function resolveApiUrl(path: string) {
   const normalizedPath = normalizePath(path)
 
   if (normalizedPath.startsWith("http")) {
@@ -76,7 +76,7 @@ export async function apiFetch<TResponse>(
   path: string,
   options: RequestInit = {},
 ) {
-  const url = resolveUrl(path)
+  const url = resolveApiUrl(path)
   const headers = new Headers(options.headers)
 
   if (!headers.has("Content-Type")) {
@@ -95,7 +95,7 @@ export async function apiUpload<TResponse>(
   formData: FormData,
   options: RequestInit = {},
 ) {
-  const url = resolveUrl(path)
+  const url = resolveApiUrl(path)
   const response = await fetch(url, {
     ...options,
     body: formData,

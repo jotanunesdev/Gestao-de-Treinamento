@@ -11,7 +11,11 @@ import {
   recordCollectiveTraining,
   submitCollectiveTrainingEfficacy,
 } from "../../shared/api/userTrainings"
-import { fetchPdfsByTrilha, type PdfItem } from "../../shared/api/pdfs"
+import {
+  buildPdfContentUrl,
+  fetchPdfsByTrilha,
+  type PdfItem,
+} from "../../shared/api/pdfs"
 import {
   fetchModules,
   fetchTrilhasByModule,
@@ -180,6 +184,15 @@ const resolveAssetUrl = (path: string) => {
   const normalizedPath = normalizePathname(pathname)
   const base = assetsBase ? `${assetsBase}/${normalizedPath}` : `/${normalizedPath}`
   return `${base}${suffix}`
+}
+
+const resolvePdfPreviewUrl = (materialId?: string | null, versao?: number | null, path?: string | null) => {
+  const contentUrl = buildPdfContentUrl(materialId ?? "", versao)
+  if (contentUrl) {
+    return contentUrl
+  }
+
+  return resolveAssetUrl(path ?? "")
 }
 
 const getYouTubeId = (urlOrId: string) => {
@@ -1002,6 +1015,8 @@ const Instructor = () => {
           users: selectedParticipants.map((employee) => employee.raw),
           trilhaIds: individualProvas.map((item) => item.trilhaId),
           turmaId: activeTurmaId,
+          redirectBaseUrl:
+            typeof window !== "undefined" ? window.location.origin : undefined,
         })
 
         setCollectiveQrState({
@@ -2085,7 +2100,11 @@ const Instructor = () => {
                             text="Abrir em nova aba"
                             variant="ghost"
                             onClick={() => {
-                              const src = resolveAssetUrl(currentMaterial.PATH_VIDEO ?? "")
+                              const src = resolvePdfPreviewUrl(
+                                currentMaterial.ID,
+                                currentMaterial.VERSAO,
+                                currentMaterial.PATH_VIDEO,
+                              )
                               if (!src) return
                               window.open(src, "_blank", "noopener,noreferrer")
                             }}
@@ -2101,7 +2120,11 @@ const Instructor = () => {
                         <iframe
                           key={`${currentMaterial.id}-${currentMaterial.VERSAO}`}
                           className={styles.trainingPdfFrame}
-                          src={resolveAssetUrl(currentMaterial.PATH_VIDEO ?? "")}
+                          src={resolvePdfPreviewUrl(
+                            currentMaterial.ID,
+                            currentMaterial.VERSAO,
+                            currentMaterial.PATH_VIDEO,
+                          )}
                           title={currentMaterial.TITULO || "PDF"}
                         />
                       </div>

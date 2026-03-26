@@ -14,7 +14,11 @@ import {
   type TrilhaItem,
   type VideoItem,
 } from "../../shared/api/trainings"
-import { fetchUserPdfs, type PdfItem } from "../../shared/api/pdfs"
+import {
+  buildPdfContentUrl,
+  fetchUserPdfs,
+  type PdfItem,
+} from "../../shared/api/pdfs"
 import {
   attachCollectiveTrainingFaceEvidence,
   completePdfTraining,
@@ -108,6 +112,15 @@ const resolveAssetUrl = (path: string) => {
     ? `${fallbackAssetsBase}/${normalizedPath}`
     : `/${normalizedPath}`
   return `${base}${suffix}`
+}
+
+const resolvePdfPreviewUrl = (materialId?: string | null, versao?: number | null, path?: string | null) => {
+  const contentUrl = buildPdfContentUrl(materialId ?? "", versao)
+  if (contentUrl) {
+    return contentUrl
+  }
+
+  return resolveAssetUrl(path ?? "")
 }
 
 const getYouTubeId = (urlOrId: string) => {
@@ -1748,7 +1761,11 @@ const TrainingsPage = () => {
                       text="Abrir em nova aba"
                       variant="ghost"
                       onClick={() => {
-                        const src = resolveAssetUrl(currentPdf.PDF_PATH ?? "")
+                        const src = resolvePdfPreviewUrl(
+                          currentPdf.ID,
+                          currentPdf.VERSAO,
+                          currentPdf.PDF_PATH,
+                        )
                         if (!src) return
                         window.open(src, "_blank", "noopener,noreferrer")
                       }}
@@ -1766,7 +1783,11 @@ const TrainingsPage = () => {
                   </div>
                   <iframe
                     className={styles.trainingPdfFrame}
-                    src={resolveAssetUrl(currentPdf.PDF_PATH ?? "")}
+                    src={resolvePdfPreviewUrl(
+                      currentPdf.ID,
+                      currentPdf.VERSAO,
+                      currentPdf.PDF_PATH,
+                    )}
                     title={resolvePdfTitle(currentPdf.PDF_PATH)}
                   />
                 </div>
@@ -1776,10 +1797,14 @@ const TrainingsPage = () => {
                     <div className={styles.trainingPdfContainer}>
                       <div className={styles.trainingPdfActions}>
                         <Button
-                          text="Abrir em nova aba"
-                          variant="ghost"
-                          onClick={() => {
-                            const src = resolveAssetUrl(currentVideo.PATH_VIDEO ?? "")
+                        text="Abrir em nova aba"
+                        variant="ghost"
+                        onClick={() => {
+                            const src = resolvePdfPreviewUrl(
+                              currentVideo.ID,
+                              currentVideo.VERSAO,
+                              currentVideo.PATH_VIDEO,
+                            )
                             if (!src) return
                             window.open(src, "_blank", "noopener,noreferrer")
                           }}
@@ -1794,7 +1819,11 @@ const TrainingsPage = () => {
                       <iframe
                         key={`${currentVideo.ID}-${currentVideo.VERSAO ?? 1}`}
                         className={styles.trainingPdfFrame}
-                        src={resolveAssetUrl(currentVideo.PATH_VIDEO ?? "")}
+                        src={resolvePdfPreviewUrl(
+                          currentVideo.ID,
+                          currentVideo.VERSAO,
+                          currentVideo.PATH_VIDEO,
+                        )}
                         title={resolveDocumentTitle(currentVideo.PATH_VIDEO, "PDF")}
                       />
                     </div>

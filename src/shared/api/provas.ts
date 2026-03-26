@@ -183,6 +183,7 @@ export async function generateCollectiveIndividualProofQr(payload: {
   users: Array<Record<string, string>>
   trilhaIds: string[]
   turmaId?: string
+  redirectBaseUrl?: string
 }) {
   return apiFetch<CollectiveIndividualProofQrResponse>(
     "/api/provas/objectiva/instrutor/individual/qr",
