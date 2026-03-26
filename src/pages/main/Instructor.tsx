@@ -22,7 +22,7 @@ import {
 } from "../../shared/api/trainings"
 import { listCompanyEmployeeObras, listCompanyEmployees } from "../../shared/api/users"
 import {
-  fetchObjectiveProvaForPlayer,
+  fetchObjectiveProvaForInstructor,
   generateCollectiveIndividualProofQr,
   submitObjectiveProvaForCollective,
   type CollectiveIndividualProofQrResponse,
@@ -1038,7 +1038,7 @@ const Instructor = () => {
 
     for (const trilha of collectiveTrilhas) {
       // eslint-disable-next-line no-await-in-loop
-      const response = await fetchObjectiveProvaForPlayer(trilha.trilhaId)
+      const response = await fetchObjectiveProvaForInstructor(trilha.trilhaId)
       const prova = response.prova
       if (!prova) {
         trilhasSemProva.push(trilha.trilhaTitulo)
