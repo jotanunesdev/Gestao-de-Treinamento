@@ -946,14 +946,6 @@ const Instructor = () => {
     [employees, selectedParticipantIds],
   )
 
-  const requiresFacialValidation = useMemo(
-    () =>
-      orderedMaterials.some(
-        (material) => Boolean(material.PROCEDIMENTO_ID) || Boolean(material.NORMA_ID),
-      ),
-    [orderedMaterials],
-  )
-
   const faceParticipants = useMemo(
     () =>
       selectedParticipants
@@ -1185,7 +1177,7 @@ const Instructor = () => {
           )
           return
         }
-        if (requiresFacialValidation && faceParticipants.length > 0) {
+        if (faceParticipants.length > 0) {
           setIsModalOpen(false)
           setIsFaceModalOpen(true)
           setFeedbackMessage(
@@ -1218,7 +1210,6 @@ const Instructor = () => {
     hasIndividualProvas,
     isSubmittingProva,
     openCollectiveEvidenceModal,
-    requiresFacialValidation,
     selectedParticipants,
   ])
 
@@ -1260,7 +1251,7 @@ const Instructor = () => {
       return
     }
 
-    if (requiresFacialValidation && faceParticipants.length > 0) {
+    if (faceParticipants.length > 0) {
       setIsModalOpen(false)
       setIsFaceModalOpen(true)
       setFeedbackMessage(
@@ -1278,7 +1269,6 @@ const Instructor = () => {
     hasIndividualProvas,
     openCollectiveEvidenceModal,
     orderedMaterialIds,
-    requiresFacialValidation,
     setCompletedMaterialIds,
   ])
 

@@ -113,6 +113,12 @@ export async function fetchObjectiveProvaForInstructor(trilhaId: string) {
   )
 }
 
+export async function fetchEfficacyProvaByTrilha(trilhaId: string) {
+  return apiFetch<{ prova: ObjectiveProvaPlayerRecord | null }>(
+    `/api/provas/trilha/${encodeURIComponent(trilhaId)}/eficacia`,
+  )
+}
+
 export async function submitObjectiveProvaForPlayer(payload: {
   trilhaId: string
   cpf: string

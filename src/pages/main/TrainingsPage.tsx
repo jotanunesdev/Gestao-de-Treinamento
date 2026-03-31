@@ -31,6 +31,7 @@ import {
   submitPlatformSatisfaction,
 } from "../../shared/api/feedbacks"
 import {
+  fetchEfficacyProvaByTrilha,
   fetchLatestObjectiveProvaResult,
   fetchObjectiveProvaForPlayer,
   resolveCollectiveIndividualProofToken,
@@ -197,6 +198,49 @@ const findFirstPendingPdf = (
   completedMap: Record<string, string>,
 ) =>
   queue.find((pdf) => !completedMap[buildCompletionKey(pdf.ID, pdf.VERSAO)]) ?? null
+
+const computeStructuredEfficacyLevel = (
+  prova: ObjectiveProvaPlayerRecord,
+  answers: Record<string, string>,
+) => {
+  const questions = Array.isArray(prova.QUESTOES) ? prova.QUESTOES : []
+  if (!questions.length) {
+    return null
+  }
+
+  let totalWeight = 0
+  let weightedScore = 0
+
+  for (const question of questions) {
+    const options = [...(question.OPCOES ?? [])].sort((left, right) => left.ORDEM - right.ORDEM)
+    if (!options.length) {
+      continue
+    }
+
+    const selectedOptionId = answers[question.ID]
+    const selectedIndex = options.findIndex((option) => option.ID === selectedOptionId)
+    if (selectedIndex < 0) {
+      return null
+    }
+
+    const weight = Number.isFinite(Number(question.PESO)) && Number(question.PESO) > 0
+      ? Number(question.PESO)
+      : 1
+    const normalizedLevel =
+      options.length <= 1
+        ? 5
+        : 1 + (selectedIndex / (options.length - 1)) * 4
+
+    totalWeight += weight
+    weightedScore += normalizedLevel * weight
+  }
+
+  if (totalWeight <= 0) {
+    return null
+  }
+
+  return Math.min(5, Math.max(1, Math.round(weightedScore / totalWeight)))
+}
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "-"
@@ -408,8 +452,10 @@ const TrainingsPage = () => {
   const [activeTrilhaId, setActiveTrilhaId] = useState<string | null>(null)
   const [currentVideoId, setCurrentVideoId] = useState<string | null>(null)
   const [currentPdfId, setCurrentPdfId] = useState<string | null>(null)
+  const [isAwaitingPostContentStep, setIsAwaitingPostContentStep] = useState(false)
   const [playerMessage, setPlayerMessage] = useState<string | null>(null)
   const [objectiveProva, setObjectiveProva] = useState<ObjectiveProvaPlayerRecord | null>(null)
+  const [efficacyProva, setEfficacyProva] = useState<ObjectiveProvaPlayerRecord | null>(null)
   const [isObjectiveLoading, setIsObjectiveLoading] = useState(false)
   const [objectiveError, setObjectiveError] = useState<string | null>(null)
   const [isObjectivePhase, setIsObjectivePhase] = useState(false)
@@ -418,6 +464,7 @@ const TrainingsPage = () => {
   const [objectiveResult, setObjectiveResult] = useState<ObjectiveProvaSubmissionResult | null>(null)
   const [isEfficacyModalOpen, setIsEfficacyModalOpen] = useState(false)
   const [efficacyLevel, setEfficacyLevel] = useState<number | null>(null)
+  const [efficacyAnswers, setEfficacyAnswers] = useState<Record<string, string>>({})
   const [efficacyError, setEfficacyError] = useState<string | null>(null)
   const [isSubmittingEfficacy, setIsSubmittingEfficacy] = useState(false)
   const [pendingEfficacyFinalMessage, setPendingEfficacyFinalMessage] = useState<string | null>(null)
@@ -692,15 +739,28 @@ const TrainingsPage = () => {
   }, [activeTrilhaId, collectiveProofToken, cpf, isPlayerModalOpen, tokenProofsByTrilha])
 
   useEffect(() => {
-    if (!isPlayerModalOpen || !objectiveProva || activeQueue.length === 0) {
+    if (!isPlayerModalOpen || !activeTrilhaId) {
+      setEfficacyProva(null)
       return
     }
 
-    const pendingVideo = findFirstPendingVideo(activeQueue, completedByKey)
-    if (!pendingVideo) {
-      setIsObjectivePhase(true)
+    let cancelled = false
+
+    fetchEfficacyProvaByTrilha(activeTrilhaId)
+      .then((response) => {
+        if (cancelled) return
+        setEfficacyProva(response.prova ?? null)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Erro ao carregar avaliacao de eficacia:", err)
+        setEfficacyProva(null)
+      })
+
+    return () => {
+      cancelled = true
     }
-  }, [activeQueue, completedByKey, isPlayerModalOpen, objectiveProva])
+  }, [activeTrilhaId, isPlayerModalOpen])
 
   const videosByTrilha = useMemo(() => {
     const map = new Map<string, VideoItem[]>()
@@ -851,12 +911,18 @@ const TrainingsPage = () => {
 
     const shouldOpenTokenProofDirectly =
       Boolean(tokenProof) && trilhaVideos.length === 0 && !firstPendingPdf
+    const shouldResumePostContentStep =
+      !shouldOpenTokenProofDirectly &&
+      !startVideo &&
+      !firstPendingPdf &&
+      (trilhaVideos.length > 0 || trilhaPdfs.length > 0)
 
     setActiveQueue(trilhaVideos)
     setActiveTrilhaTitle(trilha.TITULO)
     setActiveTrilhaId(trilha.ID)
     setCurrentVideoId(startVideo?.ID ?? null)
     setCurrentPdfId(startVideo ? null : (firstPendingPdf?.ID ?? null))
+    setIsAwaitingPostContentStep(shouldResumePostContentStep)
     setPlayerMessage(
       shouldOpenTokenProofDirectly
         ? "Prova individual liberada via QR Code. Responda para concluir."
@@ -868,6 +934,7 @@ const TrainingsPage = () => {
     setObjectiveResult(null)
     setIsEfficacyModalOpen(false)
     setEfficacyLevel(null)
+    setEfficacyAnswers({})
     setEfficacyError(null)
     setIsSubmittingEfficacy(false)
     setPendingEfficacyFinalMessage(null)
@@ -881,6 +948,7 @@ const TrainingsPage = () => {
     setActiveTrilhaId(null)
     setCurrentVideoId(null)
     setCurrentPdfId(null)
+    setIsAwaitingPostContentStep(false)
     setPlayerMessage(null)
     setObjectiveProva(null)
     setIsObjectivePhase(false)
@@ -889,9 +957,11 @@ const TrainingsPage = () => {
     setObjectiveError(null)
     setIsEfficacyModalOpen(false)
     setEfficacyLevel(null)
+    setEfficacyAnswers({})
     setEfficacyError(null)
     setIsSubmittingEfficacy(false)
     setPendingEfficacyFinalMessage(null)
+    setEfficacyProva(null)
     setIsFaceModalOpen(false)
     setIsSubmittingFaceEvidence(false)
     setFaceEvidenceError(null)
@@ -904,17 +974,21 @@ const TrainingsPage = () => {
       Boolean(collectiveProofToken) &&
       Boolean(activeTrilhaIdValue) &&
       tokenProofsByTrilha.has(activeTrilhaIdValue)
+    const hasStructuredEfficacy = Boolean(efficacyProva?.QUESTOES?.length)
     const activeTrilha = trilhas.find((item) => item.ID === activeTrilhaId)
     const required =
       isTokenFlow ||
+      hasStructuredEfficacy ||
       activeTrilha?.AVALIACAO_EFICACIA_OBRIGATORIA === true ||
       Number(activeTrilha?.AVALIACAO_EFICACIA_OBRIGATORIA ?? 0) === 1
     const hasQuestion =
       isTokenFlow ||
+      hasStructuredEfficacy ||
       String(activeTrilha?.AVALIACAO_EFICACIA_PERGUNTA ?? "").trim().length > 0
     if (!(required && hasQuestion)) {
       setPendingEfficacyFinalMessage(null)
       setEfficacyLevel(null)
+      setEfficacyAnswers({})
       setEfficacyError(null)
       setIsEfficacyModalOpen(false)
       setPlayerMessage(finalMessage)
@@ -922,9 +996,10 @@ const TrainingsPage = () => {
     }
     setPendingEfficacyFinalMessage(finalMessage)
     setEfficacyLevel(null)
+    setEfficacyAnswers({})
     setEfficacyError(null)
     setIsEfficacyModalOpen(true)
-  }, [activeTrilhaId, collectiveProofToken, tokenProofsByTrilha, trilhas])
+  }, [activeTrilhaId, collectiveProofToken, efficacyProva, tokenProofsByTrilha, trilhas])
 
   const currentVideo = useMemo(() => {
     if (!currentVideoId) return null
@@ -947,6 +1022,42 @@ const TrainingsPage = () => {
     return pdfsByTrilha.get(activeTrilhaId) ?? []
   }, [activeTrilhaId, pdfsByTrilha])
 
+  useEffect(() => {
+    if (!isPlayerModalOpen || isObjectiveLoading) {
+      return
+    }
+
+    const pendingVideo = findFirstPendingVideo(activeQueue, completedByKey)
+    const pendingPdf = findFirstPendingPdf(activeTrilhaPdfs, completedPdfByKey)
+    const shouldAdvance = isAwaitingPostContentStep || (!pendingVideo && !pendingPdf)
+
+    if (!shouldAdvance) {
+      return
+    }
+
+    setIsAwaitingPostContentStep(false)
+
+    if (objectiveProva) {
+      setCurrentVideoId(null)
+      setCurrentPdfId(null)
+      setIsObjectivePhase(true)
+      setPlayerMessage("Materiais concluidos. Responda a prova objetiva para finalizar a trilha.")
+      return
+    }
+
+    openTrilhaEfficacyModal("Trilha concluida. Todos os materiais foram finalizados.")
+  }, [
+    activeQueue,
+    activeTrilhaPdfs,
+    completedByKey,
+    completedPdfByKey,
+    isAwaitingPostContentStep,
+    isObjectiveLoading,
+    isPlayerModalOpen,
+    objectiveProva,
+    openTrilhaEfficacyModal,
+  ])
+
   const activeTrilhaRecord = useMemo(() => {
     if (!activeTrilhaId) return null
     return trilhas.find((item) => item.ID === activeTrilhaId) ?? null
@@ -956,6 +1067,22 @@ const TrainingsPage = () => {
     const configured = String(activeTrilhaRecord?.AVALIACAO_EFICACIA_PERGUNTA ?? "").trim()
     return configured || TRAINING_EFFICACY_QUESTION
   }, [activeTrilhaRecord])
+
+  const hasStructuredEfficacyProva = useMemo(
+    () => Boolean(efficacyProva?.QUESTOES?.length),
+    [efficacyProva],
+  )
+
+  const structuredEfficacyTitle = useMemo(
+    () => String(efficacyProva?.TITULO ?? "").trim(),
+    [efficacyProva],
+  )
+
+  const structuredEfficacyAnsweredCount = useMemo(
+    () =>
+      (efficacyProva?.QUESTOES ?? []).filter((question) => Boolean(efficacyAnswers[question.ID])).length,
+    [efficacyAnswers, efficacyProva],
+  )
 
   const currentPdf = useMemo(() => {
     if (!currentPdfId) return null
@@ -1131,21 +1258,24 @@ const TrainingsPage = () => {
   ])
 
   const moveToPostContentStep = useCallback(() => {
+    setCurrentVideoId(null)
+    setCurrentPdfId(null)
+
     if (isObjectiveLoading) {
+      setIsAwaitingPostContentStep(true)
+      setIsObjectivePhase(false)
       setPlayerMessage("Carregando prova objetiva. Aguarde um instante.")
       return
     }
 
     if (objectiveProva) {
-      setCurrentVideoId(null)
-      setCurrentPdfId(null)
+      setIsAwaitingPostContentStep(false)
       setIsObjectivePhase(true)
       setPlayerMessage("Materiais concluidos. Responda a prova objetiva para finalizar a trilha.")
       return
     }
 
-    setCurrentVideoId(null)
-    setCurrentPdfId(null)
+    setIsAwaitingPostContentStep(false)
     openTrilhaEfficacyModal("Trilha concluida. Todos os materiais foram finalizados.")
   }, [isObjectiveLoading, objectiveProva, openTrilhaEfficacyModal])
 
@@ -1411,6 +1541,14 @@ const TrainingsPage = () => {
     setPlayerMessage("Responda novamente a prova objetiva.")
   }, [])
 
+  const handleSelectEfficacyAnswer = useCallback((questionId: string, optionId: string) => {
+    setEfficacyAnswers((prev) => ({
+      ...prev,
+      [questionId]: optionId,
+    }))
+    setEfficacyError(null)
+  }, [])
+
   const handleEnterVideoFullscreen = useCallback(async () => {
     const target = playerMediaRef.current
     if (!target || typeof target.requestFullscreen !== "function") return
@@ -1433,9 +1571,26 @@ const TrainingsPage = () => {
       setEfficacyError("Nao foi possivel identificar a trilha para registrar a avaliacao.")
       return
     }
-    if (!efficacyLevel) {
-      setEfficacyError("Selecione uma opcao de avaliacao de eficacia.")
-      return
+
+    let nivelToSubmit: number | null = null
+    if (hasStructuredEfficacyProva && efficacyProva) {
+      const unanswered = efficacyProva.QUESTOES.filter((question) => !efficacyAnswers[question.ID])
+      if (unanswered.length > 0) {
+        setEfficacyError("Responda todas as perguntas da avaliacao de eficacia.")
+        return
+      }
+
+      nivelToSubmit = computeStructuredEfficacyLevel(efficacyProva, efficacyAnswers)
+      if (!nivelToSubmit) {
+        setEfficacyError("Nao foi possivel consolidar a avaliacao de eficacia.")
+        return
+      }
+    } else {
+      if (!efficacyLevel) {
+        setEfficacyError("Selecione uma opcao de avaliacao de eficacia.")
+        return
+      }
+      nivelToSubmit = efficacyLevel
     }
 
     try {
@@ -1444,7 +1599,7 @@ const TrainingsPage = () => {
       await submitTrilhaTrainingEfficacy({
         cpf,
         trilhaId: activeTrilhaId,
-        nivel: efficacyLevel,
+        nivel: nivelToSubmit,
         avaliadoEm: new Date().toISOString(),
       })
       setIsEfficacyModalOpen(false)
@@ -1494,7 +1649,10 @@ const TrainingsPage = () => {
     activeTrilhaId,
     collectiveProofToken,
     cpf,
+    efficacyAnswers,
     efficacyLevel,
+    efficacyProva,
+    hasStructuredEfficacyProva,
     closeTrilhaPlayer,
     pendingEfficacyFinalMessage,
     tokenProofContext?.provas,
@@ -2021,24 +2179,58 @@ const TrainingsPage = () => {
         showClose={false}
       >
         <div className={styles.trainingEficacyModal}>
-          <p className={styles.trainingEficacyQuestion}>{activeTrilhaEfficacyQuestion}</p>
+          {hasStructuredEfficacyProva && efficacyProva ? (
+            <>
+              {structuredEfficacyTitle ? (
+                <p className={styles.trainingEficacyQuestion}>{structuredEfficacyTitle}</p>
+              ) : null}
+              <p className={styles.trainingEficacyHint}>
+                Responda {structuredEfficacyAnsweredCount} de {efficacyProva.QUESTOES.length} pergunta(s).
+              </p>
 
-          <div className={styles.trainingEficacyOptions}>
-            {TRAINING_EFFICACY_OPTIONS.map((option) => (
-              <label key={option.value} className={styles.trainingEficacyOption}>
-                <input
-                  type="radio"
-                  name="training-efficacy"
-                  checked={efficacyLevel === option.value}
-                  onChange={() => {
-                    setEfficacyLevel(option.value)
-                    setEfficacyError(null)
-                  }}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
+              {efficacyProva.QUESTOES.map((question) => (
+                <div key={question.ID} className={styles.trainingEficacyModal}>
+                  <p className={styles.trainingEficacyQuestion}>{question.ENUNCIADO}</p>
+                  <div className={styles.trainingEficacyOptions}>
+                    {question.OPCOES.map((option) => (
+                      <label key={option.ID} className={styles.trainingEficacyOption}>
+                        <input
+                          type="radio"
+                          name={`training-efficacy-${question.ID}`}
+                          checked={efficacyAnswers[question.ID] === option.ID}
+                          onChange={() => {
+                            void handleSelectEfficacyAnswer(question.ID, option.ID)
+                          }}
+                        />
+                        <span>{option.TEXTO}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              <p className={styles.trainingEficacyQuestion}>{activeTrilhaEfficacyQuestion}</p>
+
+              <div className={styles.trainingEficacyOptions}>
+                {TRAINING_EFFICACY_OPTIONS.map((option) => (
+                  <label key={option.value} className={styles.trainingEficacyOption}>
+                    <input
+                      type="radio"
+                      name="training-efficacy"
+                      checked={efficacyLevel === option.value}
+                      onChange={() => {
+                        setEfficacyLevel(option.value)
+                        setEfficacyError(null)
+                      }}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
 
           {efficacyError ? <p className={styles.trainingProvaError}>{efficacyError}</p> : null}
 
@@ -2049,7 +2241,14 @@ const TrainingsPage = () => {
                 void handleSubmitTrilhaEfficacy()
               }}
               isLoading={isSubmittingEfficacy}
-              disabled={!efficacyLevel || isSubmittingEfficacy}
+              disabled={
+                isSubmittingEfficacy ||
+                (
+                  hasStructuredEfficacyProva
+                    ? structuredEfficacyAnsweredCount !== (efficacyProva?.QUESTOES.length ?? 0)
+                    : !efficacyLevel
+                )
+              }
             />
           </div>
         </div>
