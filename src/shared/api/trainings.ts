@@ -58,7 +58,7 @@ export async function fetchTrilhasByModule(moduloId: string) {
 
 export async function fetchUserVideos(cpf: string) {
   return apiFetch<{ videos: VideoItem[] }>(
-    `/api/videos?cpf=${encodeURIComponent(cpf)}`,
+    `/api/videos?cpf=${encodeURIComponent(cpf)}&includePdf=false`,
   )
 }
 
