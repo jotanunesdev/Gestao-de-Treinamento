@@ -240,7 +240,10 @@
 
 .trainingPlayerModalBodyIndividual {
     padding: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .trainingPlayerPanel {
@@ -251,6 +254,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    min-width: 0;
 }
 
 .trainingPlayerHeader {
@@ -556,6 +560,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
+    min-width: 0;
 }
 
 .trainingProvaQuestion {
@@ -566,6 +571,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.55rem;
+    min-width: 0;
 }
 
 .trainingProvaQuestionHeader {
@@ -581,12 +587,15 @@
     margin: 0;
     color: var(--surface-text);
     font-weight: 600;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .trainingProvaOptions {
     display: flex;
     flex-direction: column;
     gap: 0.45rem;
+    min-width: 0;
 }
 
 .trainingProvaOption {
@@ -597,6 +606,21 @@
     border-radius: 10px;
     padding: 0.5rem 0.6rem;
     background: var(--surface-muted-bg);
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.trainingProvaOption input {
+    flex: 0 0 auto;
+    margin-top: 0.1rem;
+}
+
+.trainingProvaOption span {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .trainingProvaOptionCorrect {
