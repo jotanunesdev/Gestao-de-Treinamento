@@ -434,6 +434,29 @@ type TokenProofInfo = {
   provaVersao: number
 }
 
+function buildTokenProofInfo(
+  prova:
+    | {
+        ID: string
+        TRILHA_FK_ID: string
+        TITULO: string | null
+        VERSAO: number
+      }
+    | null
+    | undefined,
+): TokenProofInfo | null {
+  if (!prova?.ID || !prova?.TRILHA_FK_ID) {
+    return null
+  }
+
+  return {
+    trilhaId: prova.TRILHA_FK_ID,
+    provaId: prova.ID,
+    provaTitulo: prova.TITULO?.trim() || "Prova individual",
+    provaVersao: prova.VERSAO,
+  }
+}
+
 const TrainingsPage = () => {
   const { data } = useReadViewContext<ReadViewResponse>()
   const location = useLocation()
@@ -522,12 +545,10 @@ const TrainingsPage = () => {
   const tokenProofsByTrilha = useMemo(() => {
     const map = new Map<string, TokenProofInfo>()
     for (const prova of tokenProofContext?.provas ?? []) {
-      map.set(prova.TRILHA_FK_ID, {
-        trilhaId: prova.TRILHA_FK_ID,
-        provaId: prova.ID,
-        provaTitulo: prova.TITULO?.trim() || "Prova individual",
-        provaVersao: prova.VERSAO,
-      })
+      const info = buildTokenProofInfo(prova)
+      if (info) {
+        map.set(prova.TRILHA_FK_ID, info)
+      }
     }
     return map
   }, [tokenProofContext?.provas])
@@ -1439,12 +1460,10 @@ const TrainingsPage = () => {
       })
       setObjectiveResult(result)
       if (result.aprovado) {
-        if (tokenToUse && tokenProofContext?.turmaId) {
-          setPendingFaceFinalMessage(
-            "Prova concluida com sucesso. Realize agora a coleta facial para finalizar.",
+        if (tokenToUse) {
+          openTrilhaEfficacyModal(
+            "Prova concluida com sucesso. Realize agora a avaliacao de eficacia para continuar.",
           )
-          setFaceEvidenceError(null)
-          setIsFaceModalOpen(true)
         } else {
           openTrilhaEfficacyModal(
             "Prova concluida com sucesso. Voce foi aprovado e a trilha foi finalizada.",
@@ -1466,7 +1485,6 @@ const TrainingsPage = () => {
     objectiveAnswers,
     objectiveProva,
     openTrilhaEfficacyModal,
-    tokenProofContext?.turmaId,
     tokenProofsByTrilha,
     userPayload,
   ])
@@ -1493,12 +1511,63 @@ const TrainingsPage = () => {
   const handleFaceCompleted = useCallback(
     async (captures: FacialCaptureResult[]) => {
       setIsFaceModalOpen(false)
+      const activeTrilhaIdValue = activeTrilhaId ?? ""
       const turmaId = tokenProofContext?.turmaId
-      if (!turmaId || captures.length === 0) {
-        openTrilhaEfficacyModal(
-          pendingFaceFinalMessage ?? "Coleta facial concluida. Continue para a avaliacao de eficacia.",
+      const isTokenFlow =
+        Boolean(collectiveProofToken) &&
+        Boolean(activeTrilhaIdValue) &&
+        tokenProofsByTrilha.has(activeTrilhaIdValue)
+      const finishTokenProofFlow = () => {
+        const remainingProofs =
+          tokenProofContext?.provas?.filter((item) => item.TRILHA_FK_ID !== activeTrilhaIdValue) ??
+          []
+
+        if (remainingProofs.length === 0) {
+          saveCollectiveProofToken(null)
+          setCollectiveProofToken(null)
+          setTokenProofContext(null)
+          setPendingFaceFinalMessage(null)
+          setIsSatisfactionModalOpen(false)
+          closeTrilhaPlayer()
+          return
+        }
+
+        setTokenProofContext((prev) =>
+          prev
+            ? {
+                ...prev,
+                provas: remainingProofs,
+                trilhas: remainingProofs.map((item) => item.TRILHA_FK_ID),
+              }
+            : prev,
         )
+
+        const nextProof = remainingProofs[0]
+        const nextTokenProof = buildTokenProofInfo(nextProof)
+        const nextTrilha =
+          trilhas.find((item) => item.ID === nextProof.TRILHA_FK_ID) ??
+          ({
+            ID: nextProof.TRILHA_FK_ID,
+            MODULO_FK_ID: "__token__",
+            TITULO: nextTokenProof?.provaTitulo ?? "Prova individual",
+          } as TrilhaItem)
+
         setPendingFaceFinalMessage(null)
+        openTrilhaPlayer(nextTrilha, null, nextTokenProof)
+      }
+
+      if (captures.length === 0) {
+        if (isTokenFlow) {
+          finishTokenProofFlow()
+          return
+        }
+        setPendingFaceFinalMessage(null)
+        return
+      }
+
+      if (!turmaId) {
+        setFaceEvidenceError("Turma nao identificada para registrar a coleta facial.")
+        setIsFaceModalOpen(true)
         return
       }
 
@@ -1514,12 +1583,11 @@ const TrainingsPage = () => {
             createdAt: capture.createdAt,
           })),
         })
+        if (isTokenFlow) {
+          finishTokenProofFlow()
+          return
+        }
 
-        openTrilhaEfficacyModal(
-          pendingFaceFinalMessage
-            ? `${pendingFaceFinalMessage} Facial registrada com sucesso.`
-            : "Facial registrada com sucesso.",
-        )
         setPendingFaceFinalMessage(null)
       } catch (err) {
         console.error("Erro ao anexar facial do treinamento coletivo:", err)
@@ -1531,7 +1599,17 @@ const TrainingsPage = () => {
         setIsSubmittingFaceEvidence(false)
       }
     },
-    [openTrilhaEfficacyModal, pendingFaceFinalMessage, tokenProofContext?.turmaId],
+    [
+      activeTrilhaId,
+      closeTrilhaPlayer,
+      collectiveProofToken,
+      openTrilhaPlayer,
+      pendingFaceFinalMessage,
+      tokenProofContext?.provas,
+      tokenProofContext?.turmaId,
+      tokenProofsByTrilha,
+      trilhas,
+    ],
   )
 
   const handleRetryObjective = useCallback(() => {
@@ -1608,35 +1686,23 @@ const TrainingsPage = () => {
           ? `${pendingEfficacyFinalMessage} Avaliacao de eficacia registrada.`
           : "Avaliacao de eficacia registrada com sucesso.",
       )
-      setPendingEfficacyFinalMessage(null)
 
       const isTokenFlow =
         Boolean(collectiveProofToken) &&
         Boolean(activeTrilhaId) &&
         tokenProofsByTrilha.has(activeTrilhaId)
       if (isTokenFlow) {
-        const remainingProofs =
-          tokenProofContext?.provas?.filter((item) => item.TRILHA_FK_ID !== activeTrilhaId) ??
-          []
-        if (remainingProofs.length === 0) {
-          saveCollectiveProofToken(null)
-          setCollectiveProofToken(null)
-          setTokenProofContext(null)
-          setIsFaceModalOpen(false)
-          setIsSatisfactionModalOpen(false)
-          closeTrilhaPlayer()
-        } else {
-          setTokenProofContext((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  provas: remainingProofs,
-                  trilhas: remainingProofs.map((item) => item.TRILHA_FK_ID),
-                }
-              : prev,
-          )
-        }
+        setPendingFaceFinalMessage(
+          pendingEfficacyFinalMessage
+            ? `${pendingEfficacyFinalMessage} Avaliacao de eficacia registrada. Realize agora a coleta facial para concluir.`
+            : "Avaliacao de eficacia registrada. Realize agora a coleta facial para concluir.",
+        )
+        setFaceEvidenceError(null)
+        setIsFaceModalOpen(true)
+        return
       }
+
+      setPendingEfficacyFinalMessage(null)
     } catch (err) {
       console.error("Erro ao registrar avaliacao de eficacia da trilha:", err)
       setEfficacyError(
@@ -1655,7 +1721,6 @@ const TrainingsPage = () => {
     hasStructuredEfficacyProva,
     closeTrilhaPlayer,
     pendingEfficacyFinalMessage,
-    tokenProofContext?.provas,
     tokenProofsByTrilha,
   ])
 

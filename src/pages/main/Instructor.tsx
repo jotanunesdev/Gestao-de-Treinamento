@@ -975,6 +975,12 @@ const Instructor = () => {
     setIsEfficacyModalOpen(true)
   }, [])
 
+  const openCollectiveFaceModal = useCallback((finalMessage: string) => {
+    setPendingCollectiveFinalMessage(finalMessage)
+    setIsModalOpen(false)
+    setIsFaceModalOpen(true)
+  }, [])
+
   const openCollectiveEvidenceModal = useCallback((finalMessage: string) => {
     setCollectiveDurationHours(0)
     setCollectiveDurationMinutes(15)
@@ -1177,10 +1183,14 @@ const Instructor = () => {
           )
           return
         }
+        if (efficacyParticipants.length > 0) {
+          openCollectiveEfficacyModal(
+            "Provas coletivas concluidas. Registre agora a avaliacao de eficacia dos participantes.",
+          )
+          return
+        }
         if (faceParticipants.length > 0) {
-          setIsModalOpen(false)
-          setIsFaceModalOpen(true)
-          setFeedbackMessage(
+          openCollectiveFaceModal(
             "Treinamento coletivo finalizado. Resultado da prova atribuido. Realize agora a validacao facial.",
           )
         } else {
@@ -1206,9 +1216,12 @@ const Instructor = () => {
     collectiveProvas.length,
     currentProvaIndex,
     currentProvaStep,
+    efficacyParticipants.length,
     faceParticipants.length,
     hasIndividualProvas,
     isSubmittingProva,
+    openCollectiveEfficacyModal,
+    openCollectiveFaceModal,
     openCollectiveEvidenceModal,
     selectedParticipants,
   ])
@@ -1251,10 +1264,15 @@ const Instructor = () => {
       return
     }
 
+    if (efficacyParticipants.length > 0) {
+      openCollectiveEfficacyModal(
+        "Materiais concluidos. Registre agora a avaliacao de eficacia do treinamento coletivo.",
+      )
+      return
+    }
+
     if (faceParticipants.length > 0) {
-      setIsModalOpen(false)
-      setIsFaceModalOpen(true)
-      setFeedbackMessage(
+      openCollectiveFaceModal(
         "Treinamento coletivo finalizado. Realize agora a validacao facial para concluir.",
       )
       return
@@ -1264,9 +1282,12 @@ const Instructor = () => {
   }, [
     collectiveProvas.length,
     currentMaterialId,
+    efficacyParticipants.length,
     faceParticipants.length,
     finalizeCollectiveVideoAttendance,
     hasIndividualProvas,
+    openCollectiveEfficacyModal,
+    openCollectiveFaceModal,
     openCollectiveEvidenceModal,
     orderedMaterialIds,
     setCompletedMaterialIds,
@@ -1662,12 +1683,17 @@ const Instructor = () => {
       })
 
       setIsEfficacyModalOpen(false)
-      setFeedbackMessage(
-        pendingCollectiveFinalMessage
-          ? `${pendingCollectiveFinalMessage} Avaliacao de eficacia registrada.`
-          : "Avaliacao de eficacia registrada com sucesso.",
-      )
-      setPendingCollectiveFinalMessage(null)
+      const nextMessage = pendingCollectiveFinalMessage
+        ? `${pendingCollectiveFinalMessage} Avaliacao de eficacia registrada.`
+        : "Avaliacao de eficacia registrada com sucesso."
+      if (faceParticipants.length > 0) {
+        openCollectiveFaceModal(
+          `${nextMessage} Realize agora a validacao facial dos participantes.`,
+        )
+        return
+      }
+
+      openCollectiveEvidenceModal(nextMessage)
     } catch (error) {
       console.error("Erro ao registrar avaliacao de eficacia coletiva:", error)
       setCollectiveEfficacyError(
@@ -1683,6 +1709,9 @@ const Instructor = () => {
     canSubmitCollectiveEfficacy,
     collectiveEfficacyLevels,
     efficacyParticipants,
+    faceParticipants.length,
+    openCollectiveEvidenceModal,
+    openCollectiveFaceModal,
     pendingCollectiveFinalMessage,
   ])
 
