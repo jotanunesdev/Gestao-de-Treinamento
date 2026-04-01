@@ -105,6 +105,10 @@ const FacialEnrollmentModal = ({
     if (!matchParticipantId) return null
     return participantsById.get(matchParticipantId) ?? null
   }, [matchParticipantId, participantsById])
+  const selectedMatchParticipant = useMemo(() => {
+    if (!selectedParticipantId) return null
+    return participantsById.get(selectedParticipantId) ?? null
+  }, [participantsById, selectedParticipantId])
 
   const selfParticipant = useMemo(() => {
     if (!isIndividualMode) return null
@@ -407,8 +411,9 @@ const FacialEnrollmentModal = ({
         return
       }
 
-      const defaultParticipantId =
-        matchedParticipant?.id ?? pendingParticipants[0]?.id ?? participants[0]?.id ?? ""
+      const defaultParticipantId = matchResponse.match
+        ? matchedParticipant?.id ?? ""
+        : pendingParticipants[0]?.id ?? participants[0]?.id ?? ""
 
       setPendingCapture(captureDraft)
       setSelectedParticipantId(defaultParticipantId)
@@ -453,18 +458,27 @@ const FacialEnrollmentModal = ({
   }, [pendingCapture, selectedParticipantId, persistCaptureForParticipant])
 
   const handleConfirmMatched = useCallback(() => {
-    if (!matchParticipantId) {
+    const participantIdToConfirm = isIndividualMode
+      ? matchParticipantId
+      : selectedParticipantId
+
+    if (!participantIdToConfirm) {
       setIsMatchConfirmOpen(false)
       setStatus(
         isIndividualMode
           ? "Nao foi possivel confirmar sua identidade. Tire uma nova selfie."
-          : "Rosto encontrado fora da lista selecionada. Vincule manualmente.",
+          : "Selecione o colaborador correto antes de confirmar a facial.",
       )
       return
     }
-    setSelectedParticipantId(matchParticipantId)
-    void persistCaptureForParticipant(matchParticipantId, undefined, isIndividualMode)
-  }, [isIndividualMode, matchParticipantId, persistCaptureForParticipant])
+    setSelectedParticipantId(participantIdToConfirm)
+    void persistCaptureForParticipant(participantIdToConfirm, undefined, isIndividualMode)
+  }, [
+    isIndividualMode,
+    matchParticipantId,
+    persistCaptureForParticipant,
+    selectedParticipantId,
+  ])
 
   const handleMatchManual = useCallback(() => {
     setIsMatchConfirmOpen(false)
@@ -478,12 +492,22 @@ const FacialEnrollmentModal = ({
   }, [isIndividualMode])
 
   const matchedRole =
+    matchedCandidate?.cargo ??
     matchedParticipant?.raw?.NOME_FUNCAO ??
     matchedParticipant?.raw?.CARGO ??
     "-"
   const matchedDepartment =
+    matchedCandidate?.setor ??
     matchedParticipant?.raw?.NOMEDEPARTAMENTO ??
     matchedParticipant?.raw?.NOME_SECAO ??
+    "-"
+  const selectedParticipantRole =
+    selectedMatchParticipant?.raw?.NOME_FUNCAO ??
+    selectedMatchParticipant?.raw?.CARGO ??
+    "-"
+  const selectedParticipantDepartment =
+    selectedMatchParticipant?.raw?.NOMEDEPARTAMENTO ??
+    selectedMatchParticipant?.raw?.NOME_SECAO ??
     "-"
 
   const handleComplete = useCallback(() => {
@@ -737,41 +761,62 @@ const FacialEnrollmentModal = ({
           ) : (
             <>
               <p className={styles.matchModalText}>
-                Rosto encontrado na base. Confirme os dados antes de vincular.
+                Encontramos uma facial ja cadastrada na base. Confirme os dados ou selecione
+                o colaborador correto antes de vincular.
               </p>
 
               <div className={styles.matchBlock}>
-                <h5 className={styles.matchBlockTitle}>Face reconhecida</h5>
+                <h5 className={styles.matchBlockTitle}>Dados encontrados na base</h5>
                 <div className={styles.matchGrid}>
                   <span><strong>Nome:</strong> {matchedCandidate?.nome ?? "-"}</span>
                   <span><strong>CPF:</strong> {matchedCandidate?.cpf ?? "-"}</span>
+                  <span><strong>Funcao:</strong> {matchedRole}</span>
+                  <span><strong>Departamento:</strong> {matchedDepartment}</span>
                   <span><strong>Confianca:</strong> {matchedCandidate ? `${(matchedCandidate.confidence * 100).toFixed(1)}%` : "-"}</span>
                   <span><strong>Distancia:</strong> {matchedCandidate ? matchedCandidate.distance.toFixed(4) : "-"}</span>
                 </div>
               </div>
 
               <div className={styles.matchBlock}>
-                <h5 className={styles.matchBlockTitle}>Colaborador da turma</h5>
-                {matchedParticipant ? (
+                <h5 className={styles.matchBlockTitle}>Vincular ao colaborador da turma</h5>
+                <label className={styles.pendingLabel} htmlFor="match-participant-select">
+                  Colaborador correto
+                </label>
+                <select
+                  id="match-participant-select"
+                  className={styles.pendingSelect}
+                  value={selectedParticipantId}
+                  onChange={(event) => setSelectedParticipantId(event.target.value)}
+                  disabled={isSaving}
+                >
+                  <option value="">Selecione um colaborador</option>
+                  {participants.map((participant) => (
+                    <option key={participant.id} value={participant.id}>
+                      {participant.nome} - {participant.cpf}
+                    </option>
+                  ))}
+                </select>
+                {selectedMatchParticipant ? (
                   <div className={styles.matchGrid}>
-                    <span><strong>Nome:</strong> {matchedParticipant.nome}</span>
-                    <span><strong>CPF:</strong> {matchedParticipant.cpf}</span>
-                    <span><strong>Funcao:</strong> {matchedRole}</span>
-                    <span><strong>Departamento:</strong> {matchedDepartment}</span>
+                    <span><strong>Nome:</strong> {selectedMatchParticipant.nome}</span>
+                    <span><strong>CPF:</strong> {selectedMatchParticipant.cpf}</span>
+                    <span><strong>Funcao:</strong> {selectedParticipantRole}</span>
+                    <span><strong>Departamento:</strong> {selectedParticipantDepartment}</span>
                   </div>
                 ) : (
                   <p className={styles.matchWarning}>
-                    O CPF identificado nao esta na lista selecionada para este treinamento.
+                    Se a facial reconhecida nao corresponder ao colaborador certo, selecione
+                    manualmente na lista acima.
                   </p>
                 )}
               </div>
 
               <div className={styles.matchModalActions}>
-                <Button text="Selecionar Manualmente" variant="ghost" onClick={handleMatchManual} />
+                <Button text="Fechar" variant="ghost" onClick={handleMatchManual} />
                 <Button
-                  text="Confirmar e Salvar"
+                  text="Confirmar e Vincular"
                   onClick={handleConfirmMatched}
-                  disabled={!matchedParticipant}
+                  disabled={!selectedParticipantId}
                   isLoading={isSaving}
                 />
               </div>

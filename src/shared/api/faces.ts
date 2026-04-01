@@ -15,6 +15,8 @@ export type FaceMatchCandidate = {
   faceId: string
   cpf: string
   nome: string | null
+  cargo?: string | null
+  setor?: string | null
   distance: number
   confidence: number
   createdAt: string
