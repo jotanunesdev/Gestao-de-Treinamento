@@ -1043,8 +1043,18 @@ const TrainingsPage = () => {
     return pdfsByTrilha.get(activeTrilhaId) ?? []
   }, [activeTrilhaId, pdfsByTrilha])
 
+  const isActiveTokenProofFlow = useMemo(() => {
+    if (!activeTrilhaId) return false
+    return Boolean(collectiveProofToken) && tokenProofsByTrilha.has(activeTrilhaId)
+  }, [activeTrilhaId, collectiveProofToken, tokenProofsByTrilha])
+
+  const isTokenProofWithoutMaterials = useMemo(
+    () => isActiveTokenProofFlow && activeQueue.length === 0 && activeTrilhaPdfs.length === 0,
+    [activeQueue.length, activeTrilhaPdfs.length, isActiveTokenProofFlow],
+  )
+
   useEffect(() => {
-    if (!isPlayerModalOpen || isObjectiveLoading) {
+    if (!isPlayerModalOpen || isObjectiveLoading || isTokenProofWithoutMaterials) {
       return
     }
 
@@ -1074,6 +1084,7 @@ const TrainingsPage = () => {
     completedPdfByKey,
     isAwaitingPostContentStep,
     isObjectiveLoading,
+    isTokenProofWithoutMaterials,
     isPlayerModalOpen,
     objectiveProva,
     openTrilhaEfficacyModal,
@@ -1752,11 +1763,6 @@ const TrainingsPage = () => {
     }
   }, [cpf, satisfactionLevel])
 
-  const isActiveTokenProofFlow = useMemo(() => {
-    if (!activeTrilhaId) return false
-    return Boolean(collectiveProofToken) && tokenProofsByTrilha.has(activeTrilhaId)
-  }, [activeTrilhaId, collectiveProofToken, tokenProofsByTrilha])
-
   return (
     <>
       <header className={styles.nav}>
@@ -1955,12 +1961,12 @@ const TrainingsPage = () => {
                       ) : objectiveResult.aprovado ? (
                         isActiveTokenProofFlow ? (
                           <Button
-                            text="Coletar Facial"
+                            text="Continuar para Avaliacao"
                             onClick={() => {
-                              setFaceEvidenceError(null)
-                              setIsFaceModalOpen(true)
+                              openTrilhaEfficacyModal(
+                                "Prova concluida com sucesso. Realize agora a avaliacao de eficacia para continuar.",
+                              )
                             }}
-                            isLoading={isSubmittingFaceEvidence}
                           />
                         ) : (
                           <Button text="Fechar" onClick={closeTrilhaPlayer} />
