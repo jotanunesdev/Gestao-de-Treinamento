@@ -509,7 +509,6 @@ const TrainingsPage = () => {
   const [isFaceModalOpen, setIsFaceModalOpen] = useState(false)
   const [isSubmittingFaceEvidence, setIsSubmittingFaceEvidence] = useState(false)
   const [faceEvidenceError, setFaceEvidenceError] = useState<string | null>(null)
-  const [pendingFaceFinalMessage, setPendingFaceFinalMessage] = useState<string | null>(null)
   const lastProgressSecondRef = useRef(0)
   const playerMediaRef = useRef<HTMLDivElement | null>(null)
   const satisfactionPromptShownRef = useRef(false)
@@ -876,6 +875,11 @@ const TrainingsPage = () => {
     [pdfsByTrilha, tokenProofsByTrilha, trilhas, videosByTrilha],
   )
 
+  const pendingTrilhaCards = useMemo(
+    () => trilhaCards.filter(({ trilha }) => !completedTrilhasByKey[trilha.ID]),
+    [completedTrilhasByKey, trilhaCards],
+  )
+
   const maybePromptPlatformSatisfaction = useCallback(async () => {
     if (!cpf || cpf.length !== 11 || satisfactionPromptShownRef.current) {
       return
@@ -979,27 +983,34 @@ const TrainingsPage = () => {
     setIsPlayerModalOpen(true)
   }, [completedByKey, completedPdfByKey, pdfsByTrilha, videosByTrilha])
 
-  const handleCompleteTrilha = useCallback(async () => {
-    if (!cpf || cpf.length !== 11 || !activeTrilhaId) return
-    if (completedTrilhasByKey[activeTrilhaId]) return
+  const handleCompleteTrilha = useCallback(async (
+    trilhaId = activeTrilhaId,
+    origem = "player",
+  ) => {
+    if (!cpf || cpf.length !== 11 || !trilhaId) return false
+    if (completedTrilhasByKey[trilhaId]) return true
+
+    const completedAt = new Date().toISOString()
 
     try {
       await completeTrilhaTraining({
         cpf,
-        trilhaId: activeTrilhaId,
-        concluidoEm: new Date().toISOString(),
-        origem: "player",
+        trilhaId,
+        concluidoEm: completedAt,
+        origem,
       })
       setCompletedTrilhasByKey((prev) => ({
         ...prev,
-        [activeTrilhaId]: new Date().toISOString(),
+        [trilhaId]: prev[trilhaId] ?? completedAt,
       }))
+      return true
     } catch (err) {
       console.error("Erro ao registrar conclusao da trilha:", err)
+      return false
     }
   }, [activeTrilhaId, completedTrilhasByKey, cpf])
 
-  const closeTrilhaPlayer = () => {
+  const closeTrilhaPlayer = useCallback(() => {
     setIsPlayerModalOpen(false)
     setActiveQueue([])
     setActiveTrilhaTitle("")
@@ -1023,8 +1034,7 @@ const TrainingsPage = () => {
     setIsFaceModalOpen(false)
     setIsSubmittingFaceEvidence(false)
     setFaceEvidenceError(null)
-    setPendingFaceFinalMessage(null)
-  }
+  }, [])
 
   const openTrilhaEfficacyModal = useCallback((finalMessage: string) => {
     const activeTrilhaIdValue = activeTrilhaId ?? ""
@@ -1575,7 +1585,6 @@ const TrainingsPage = () => {
           saveCollectiveProofToken(null)
           setCollectiveProofToken(null)
           setTokenProofContext(null)
-          setPendingFaceFinalMessage(null)
           setIsSatisfactionModalOpen(false)
           closeTrilhaPlayer()
           return
@@ -1601,7 +1610,6 @@ const TrainingsPage = () => {
             TITULO: nextTokenProof?.provaTitulo ?? "Prova individual",
           } as TrilhaItem)
 
-        setPendingFaceFinalMessage(null)
         openTrilhaPlayer(nextTrilha, null, nextTokenProof)
       }
 
@@ -1610,7 +1618,6 @@ const TrainingsPage = () => {
           finishTokenProofFlow()
           return
         }
-        setPendingFaceFinalMessage(null)
         return
       }
 
@@ -1633,11 +1640,11 @@ const TrainingsPage = () => {
           })),
         })
         if (isTokenFlow) {
+          await handleCompleteTrilha(activeTrilhaIdValue, "prova-individual")
           finishTokenProofFlow()
           return
         }
 
-        setPendingFaceFinalMessage(null)
       } catch (err) {
         console.error("Erro ao anexar facial do treinamento coletivo:", err)
         setFaceEvidenceError(
@@ -1652,8 +1659,8 @@ const TrainingsPage = () => {
       activeTrilhaId,
       closeTrilhaPlayer,
       collectiveProofToken,
+      handleCompleteTrilha,
       openTrilhaPlayer,
-      pendingFaceFinalMessage,
       tokenProofContext?.provas,
       tokenProofContext?.turmaId,
       tokenProofsByTrilha,
@@ -1741,11 +1748,6 @@ const TrainingsPage = () => {
         Boolean(activeTrilhaId) &&
         tokenProofsByTrilha.has(activeTrilhaId)
       if (isTokenFlow) {
-        setPendingFaceFinalMessage(
-          pendingEfficacyFinalMessage
-            ? `${pendingEfficacyFinalMessage} Avaliacao de eficacia registrada. Realize agora a coleta facial para concluir.`
-            : "Avaliacao de eficacia registrada. Realize agora a coleta facial para concluir.",
-        )
         setFaceEvidenceError(null)
         setIsFaceModalOpen(true)
         return
@@ -1770,7 +1772,6 @@ const TrainingsPage = () => {
     efficacyProva,
     handleCompleteTrilha,
     hasStructuredEfficacyProva,
-    closeTrilhaPlayer,
     pendingEfficacyFinalMessage,
     tokenProofsByTrilha,
   ])
@@ -1823,14 +1824,13 @@ const TrainingsPage = () => {
           {tokenProofError ? <p className={styles.trainingEmpty}>Erro: {tokenProofError}</p> : null}
           {faceEvidenceError ? <p className={styles.trainingEmpty}>Erro: {faceEvidenceError}</p> : null}
 
-          {!isLoading && !error && trilhaCards.length === 0 ? (
+          {!isLoading && !error && pendingTrilhaCards.length === 0 ? (
             <p className={styles.trainingEmpty}>Nenhum treinamento atribuido.</p>
           ) : null}
 
-          {!isLoading && !error && trilhaCards.length > 0 ? (
+          {!isLoading && !error && pendingTrilhaCards.length > 0 ? (
             <div className={styles.trainingCardsGrid}>
-              {trilhaCards.map(({ trilha, videoCount, documentCount, tokenProof }) => {
-                const isConcluido = Boolean(completedTrilhasByKey[trilha.ID])
+              {pendingTrilhaCards.map(({ trilha, videoCount, documentCount, tokenProof }) => {
                 return (
                   <article key={trilha.ID} className={styles.trainingTrilhaCard}>
                     <h4 className={styles.trainingBlockTitle}>{trilha.TITULO}</h4>
@@ -1847,11 +1847,8 @@ const TrainingsPage = () => {
                         .filter(Boolean)
                         .join(" + ")}
                     </p>
-                    {isConcluido ? (
-                      <p className={styles.trainingVideoDone}>Concluido</p>
-                    ) : null}
                     <Button
-                      text={isConcluido ? "Revisar" : "Assistir"}
+                      text="Assistir"
                       onClick={() => openTrilhaPlayer(trilha, null, tokenProof)}
                       disabled={videoCount === 0 && documentCount === 0 && !tokenProof}
                     />
