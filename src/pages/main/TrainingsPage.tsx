@@ -35,7 +35,6 @@ import {
 } from "../../shared/api/feedbacks"
 import {
   fetchEfficacyProvaByTrilha,
-  fetchLatestObjectiveProvaResult,
   fetchObjectiveProvaForPlayer,
   resolveCollectiveIndividualProofToken,
   submitObjectiveProvaForPlayer,
@@ -708,53 +707,19 @@ const TrainingsPage = () => {
     let cancelled = false
     setIsObjectiveLoading(true)
     setObjectiveError(null)
+    setObjectiveAnswers({})
+    setObjectiveResult(null)
 
     const activeTokenProof = tokenProofsByTrilha.get(activeTrilhaId)
     const tokenToUse =
       activeTokenProof && collectiveProofToken ? collectiveProofToken : undefined
 
-    Promise.all([
-      fetchObjectiveProvaForPlayer(activeTrilhaId, cpf, tokenToUse),
-      fetchLatestObjectiveProvaResult(activeTrilhaId, cpf),
-    ])
-      .then(([provaResponse, latestResultResponse]) => {
+    fetchObjectiveProvaForPlayer(activeTrilhaId, cpf, tokenToUse)
+      .then((provaResponse) => {
         if (cancelled) return
 
         const prova = provaResponse.prova ?? null
         setObjectiveProva(prova)
-
-        const latestResult = latestResultResponse.result
-        if (
-          prova &&
-          latestResult &&
-          latestResult.PROVA_ID === prova.ID &&
-          latestResult.PROVA_VERSAO === prova.VERSAO &&
-          latestResult.STATUS === "aprovado" &&
-          typeof latestResult.RESPOSTAS === "object"
-        ) {
-          const respostasPayload = latestResult.RESPOSTAS as {
-            gabarito?: ObjectiveProvaSubmissionResult["gabarito"]
-          }
-
-          if (Array.isArray(respostasPayload.gabarito)) {
-            setObjectiveResult({
-              nota: Number(latestResult.NOTA ?? 0),
-              media: 6,
-              status: latestResult.STATUS,
-              acertos: Number(latestResult.ACERTOS ?? 0),
-              totalQuestoes: Number(latestResult.TOTAL_QUESTOES ?? 0),
-              aprovado: latestResult.STATUS === "aprovado",
-              gabarito: respostasPayload.gabarito,
-              prova: {
-                id: prova.ID,
-                versao: prova.VERSAO,
-                titulo: prova.TITULO ?? null,
-              },
-            })
-          }
-        } else {
-          setObjectiveResult(null)
-        }
       })
       .catch((err) => {
         if (cancelled) return
