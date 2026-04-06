@@ -22,9 +22,12 @@ import {
 import {
   attachCollectiveTrainingFaceEvidence,
   completePdfTraining,
+  completeTrilhaTraining,
   completeVideoTraining,
+  listCompletedTrilhas,
   listCompletedVideoTrainings,
   submitTrilhaTrainingEfficacy,
+  type UserTrilhaCompletionRecord,
 } from "../../shared/api/userTrainings"
 import {
   getPlatformSatisfactionStatus,
@@ -466,6 +469,7 @@ const TrainingsPage = () => {
   const [pdfs, setPdfs] = useState<PdfItem[]>([])
   const [completedByKey, setCompletedByKey] = useState<Record<string, string>>({})
   const [completedPdfByKey, setCompletedPdfByKey] = useState<Record<string, string>>({})
+  const [completedTrilhasByKey, setCompletedTrilhasByKey] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -631,10 +635,11 @@ const TrainingsPage = () => {
       fetchUserVideos(cpf),
       fetchUserPdfs(cpf),
       listCompletedVideoTrainings(cpf),
+      listCompletedTrilhas(cpf),
     ])
       .then((results) => {
         if (cancelled) return
-        const [trilhasResult, videosResult, pdfsResult, completionsResult] = results
+        const [trilhasResult, videosResult, pdfsResult, completionsResult, trilhaCompletionsResult] = results
 
         if (trilhasResult.status === "rejected" || videosResult.status === "rejected") {
           const firstError =
@@ -668,6 +673,18 @@ const TrainingsPage = () => {
           setCompletedByKey(nextCompleted)
         } else {
           setCompletedByKey({})
+        }
+
+        if (trilhaCompletionsResult.status === "fulfilled") {
+          const nextTrilhaCompleted = (trilhaCompletionsResult.value.completions ?? []).reduce<
+            Record<string, string>
+          >((acc, c: UserTrilhaCompletionRecord) => {
+            acc[c.TRILHA_ID] = c.DT_CONCLUSAO
+            return acc
+          }, {})
+          setCompletedTrilhasByKey(nextTrilhaCompleted)
+        } else {
+          setCompletedTrilhasByKey({})
         }
       })
       .catch((err) => {
@@ -962,6 +979,26 @@ const TrainingsPage = () => {
     setIsPlayerModalOpen(true)
   }, [completedByKey, completedPdfByKey, pdfsByTrilha, videosByTrilha])
 
+  const handleCompleteTrilha = useCallback(async () => {
+    if (!cpf || cpf.length !== 11 || !activeTrilhaId) return
+    if (completedTrilhasByKey[activeTrilhaId]) return
+
+    try {
+      await completeTrilhaTraining({
+        cpf,
+        trilhaId: activeTrilhaId,
+        concluidoEm: new Date().toISOString(),
+        origem: "player",
+      })
+      setCompletedTrilhasByKey((prev) => ({
+        ...prev,
+        [activeTrilhaId]: new Date().toISOString(),
+      }))
+    } catch (err) {
+      console.error("Erro ao registrar conclusao da trilha:", err)
+    }
+  }, [activeTrilhaId, completedTrilhasByKey, cpf])
+
   const closeTrilhaPlayer = () => {
     setIsPlayerModalOpen(false)
     setActiveQueue([])
@@ -1013,6 +1050,7 @@ const TrainingsPage = () => {
       setEfficacyError(null)
       setIsEfficacyModalOpen(false)
       setPlayerMessage(finalMessage)
+      void handleCompleteTrilha()
       return
     }
     setPendingEfficacyFinalMessage(finalMessage)
@@ -1020,7 +1058,7 @@ const TrainingsPage = () => {
     setEfficacyAnswers({})
     setEfficacyError(null)
     setIsEfficacyModalOpen(true)
-  }, [activeTrilhaId, collectiveProofToken, efficacyProva, tokenProofsByTrilha, trilhas])
+  }, [activeTrilhaId, collectiveProofToken, efficacyProva, handleCompleteTrilha, tokenProofsByTrilha, trilhas])
 
   const currentVideo = useMemo(() => {
     if (!currentVideoId) return null
@@ -1713,6 +1751,7 @@ const TrainingsPage = () => {
         return
       }
 
+      void handleCompleteTrilha()
       setPendingEfficacyFinalMessage(null)
     } catch (err) {
       console.error("Erro ao registrar avaliacao de eficacia da trilha:", err)
@@ -1729,6 +1768,7 @@ const TrainingsPage = () => {
     efficacyAnswers,
     efficacyLevel,
     efficacyProva,
+    handleCompleteTrilha,
     hasStructuredEfficacyProva,
     closeTrilhaPlayer,
     pendingEfficacyFinalMessage,
@@ -1789,29 +1829,35 @@ const TrainingsPage = () => {
 
           {!isLoading && !error && trilhaCards.length > 0 ? (
             <div className={styles.trainingCardsGrid}>
-              {trilhaCards.map(({ trilha, videoCount, documentCount, tokenProof }) => (
-                <article key={trilha.ID} className={styles.trainingTrilhaCard}>
-                  <h4 className={styles.trainingBlockTitle}>{trilha.TITULO}</h4>
-                  <p className={styles.trainingMeta}>
-                    {[
-                      videoCount > 0
-                        ? `${videoCount} ${videoCount === 1 ? "video" : "videos"}`
-                        : null,
-                      documentCount > 0
-                        ? `${documentCount} ${documentCount === 1 ? "documento" : "documentos"}`
-                        : null,
-                      tokenProof ? "prova individual" : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" + ")}
-                  </p>
-                  <Button
-                    text="Assistir"
-                    onClick={() => openTrilhaPlayer(trilha, null, tokenProof)}
-                    disabled={videoCount === 0 && documentCount === 0 && !tokenProof}
-                  />
-                </article>
-              ))}
+              {trilhaCards.map(({ trilha, videoCount, documentCount, tokenProof }) => {
+                const isConcluido = Boolean(completedTrilhasByKey[trilha.ID])
+                return (
+                  <article key={trilha.ID} className={styles.trainingTrilhaCard}>
+                    <h4 className={styles.trainingBlockTitle}>{trilha.TITULO}</h4>
+                    <p className={styles.trainingMeta}>
+                      {[
+                        videoCount > 0
+                          ? `${videoCount} ${videoCount === 1 ? "video" : "videos"}`
+                          : null,
+                        documentCount > 0
+                          ? `${documentCount} ${documentCount === 1 ? "documento" : "documentos"}`
+                          : null,
+                        tokenProof ? "prova individual" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" + ")}
+                    </p>
+                    {isConcluido ? (
+                      <p className={styles.trainingVideoDone}>Concluido</p>
+                    ) : null}
+                    <Button
+                      text={isConcluido ? "Revisar" : "Assistir"}
+                      onClick={() => openTrilhaPlayer(trilha, null, tokenProof)}
+                      disabled={videoCount === 0 && documentCount === 0 && !tokenProof}
+                    />
+                  </article>
+                )
+              })}
             </div>
           ) : null}
         </div>
@@ -2039,7 +2085,7 @@ const TrainingsPage = () => {
                           }}
                         />
                         <Button
-                          text="Concluir e continuar"
+                          text="Finalizar"
                           onClick={() => {
                             void advanceToNextVideo()
                           }}
@@ -2056,6 +2102,33 @@ const TrainingsPage = () => {
                         title={resolveDocumentTitle(currentVideo.PATH_VIDEO, "PDF")}
                       />
                     </div>
+                  ) : currentVideoDisplayKind === "slide" ? (
+                    <div className={styles.trainingPdfContainer}>
+                      <div className={styles.trainingPdfActions}>
+                        <Button
+                          text="Abrir slides"
+                          variant="ghost"
+                          onClick={() => {
+                            const src = resolveAssetUrl(currentVideo.PATH_VIDEO ?? "")
+                            if (!src) return
+                            window.open(src, "_blank", "noopener,noreferrer")
+                          }}
+                        />
+                        <Button
+                          text="Finalizar"
+                          onClick={() => {
+                            void advanceToNextVideo()
+                          }}
+                        />
+                      </div>
+                      <div className={styles.trainingPlayerPlaceholder}>
+                        Slides carregados para esta trilha. Use
+                        <strong> Abrir slides </strong>
+                        para visualizar o conteudo e clique em
+                        <strong> Finalizar </strong>
+                        para continuar.
+                      </div>
+                    </div>
                   ) : currentVideoDisplayKind === "document" ? (
                     <div className={styles.trainingPdfContainer}>
                       <div className={styles.trainingPdfActions}>
@@ -2069,7 +2142,7 @@ const TrainingsPage = () => {
                           }}
                         />
                         <Button
-                          text="Concluir e continuar"
+                          text="Finalizar"
                           onClick={() => {
                             void advanceToNextVideo()
                           }}
@@ -2078,7 +2151,9 @@ const TrainingsPage = () => {
                       <div className={styles.trainingPlayerPlaceholder}>
                         Arquivo {currentVideoBadgeLabel} carregado para esta trilha. Use
                         <strong> Abrir arquivo </strong>
-                        para visualizar o conteudo e depois conclua para continuar.
+                        para visualizar o conteudo e clique em
+                        <strong> Finalizar </strong>
+                        para continuar.
                       </div>
                     </div>
                   ) : getYouTubeId(currentVideo.PATH_VIDEO ?? "") ? (

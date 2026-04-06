@@ -1,11 +1,9 @@
-export type TrainingMaterialDisplayKind = "video" | "pdf" | "document"
+export type TrainingMaterialDisplayKind = "video" | "pdf" | "slide" | "document"
+
+const SLIDE_EXTENSIONS = new Set(["ppt", "pptx", "pps", "ppsx"])
 
 const DOCUMENT_EXTENSIONS = new Set([
   "pdf",
-  "ppt",
-  "pptx",
-  "pps",
-  "ppsx",
   "doc",
   "docx",
   "xls",
@@ -44,10 +42,17 @@ export function resolveTrainingMaterialDisplayKind(
   if (normalizedType === "pdf") {
     return "pdf"
   }
+  if (normalizedType === "slide") {
+    return "slide"
+  }
 
   const extension = resolveTrainingMaterialExtension(pathValue)
   if (extension === "pdf") {
     return "pdf"
+  }
+
+  if (extension && SLIDE_EXTENSIONS.has(extension)) {
+    return "slide"
   }
 
   if (extension && DOCUMENT_EXTENSIONS.has(extension)) {
@@ -64,6 +69,10 @@ export function resolveTrainingMaterialBadgeLabel(
   const displayKind = resolveTrainingMaterialDisplayKind(pathValue, explicitType)
   if (displayKind === "pdf") {
     return "PDF"
+  }
+
+  if (displayKind === "slide") {
+    return "Slide"
   }
 
   if (displayKind === "document") {

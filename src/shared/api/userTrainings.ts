@@ -120,3 +120,30 @@ export async function submitCollectiveTrainingEfficacy(payload: {
     body: JSON.stringify(payload),
   })
 }
+
+export type UserTrilhaCompletionRecord = {
+  USUARIO_CPF: string
+  TRILHA_ID: string
+  TRILHA_TITULO: string
+  MODULO_ID: string
+  MODULO_NOME: string
+  DT_CONCLUSAO: string
+}
+
+export async function completeTrilhaTraining(payload: {
+  cpf: string
+  trilhaId: string
+  concluidoEm?: string
+  origem?: string
+}) {
+  return apiFetch<{ success: boolean }>("/api/user-trainings/complete-trilha", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function listCompletedTrilhas(cpf: string) {
+  return apiFetch<{ completions: UserTrilhaCompletionRecord[] }>(
+    `/api/user-trainings/completions/trilhas/${encodeURIComponent(cpf)}`,
+  )
+}
