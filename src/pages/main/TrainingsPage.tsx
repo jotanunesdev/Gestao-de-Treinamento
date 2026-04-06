@@ -1977,7 +1977,14 @@ const TrainingsPage = () => {
                             }}
                           />
                         ) : (
-                          <Button text="Fechar" onClick={closeTrilhaPlayer} />
+                          <Button
+                            text="Concluir"
+                            onClick={() => {
+                              openTrilhaEfficacyModal(
+                                "Prova concluida com sucesso. Seu treinamento foi registrado.",
+                              )
+                            }}
+                          />
                         )
                       ) : (
                         <Button text="Tentar Novamente" onClick={handleRetryObjective} />
